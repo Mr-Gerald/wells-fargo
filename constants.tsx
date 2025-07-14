@@ -1,5 +1,3 @@
-
-
 import React from 'react';
 
 // FICO data remains constant for the purpose of this demo
