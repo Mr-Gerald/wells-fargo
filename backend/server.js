@@ -11,7 +11,7 @@ const { GoogleGenAI } = require('@google/genai');
 const { sendSignupEmail } = require('./emailService');
 
 const app = express();
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const DB_PATH = path.join(__dirname, 'database.json');
 const DB_TEMPLATE_PATH = path.join(__dirname, 'database.template.json');
 const JWT_SECRET = 'your-super-secret-jwt-key-that-should-be-in-an-env-file';
