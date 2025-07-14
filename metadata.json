@@ -1,0 +1,8 @@
+{
+  "name": "Wells Fargo UI Clone",
+  "description": "A high-fidelity clone of the Wells Fargo mobile banking application interface, focusing on the login, account summary, and transaction details screens. Built with React, TypeScript, and Tailwind CSS.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "prompt": ""
+}

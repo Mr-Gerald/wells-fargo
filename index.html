@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Wells Fargo</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'wells-red': '#D71E28',
+              'wells-dark-red': '#b81922',
+              'wells-purple-light': '#E9E6F1',
+              'wells-purple-dark': '#D4CFE6',
+              'wells-gradient-start': '#aba4c8',
+              'wells-gradient-end': '#F7F8FA',
+            },
+             keyframes: {
+                fadeIn: {
+                    '0%': { opacity: '0' },
+                    '100%': { opacity: '1' },
+                },
+                bounce: {
+                  '0%, 100%': { transform: 'translateY(-25%)', animationTimingFunction: 'cubic-bezier(0.8,0,1,1)' },
+                  '50%': { transform: 'none', animationTimingFunction: 'cubic-bezier(0,0,0.2,1)' }
+                }
+            },
+            animation: {
+                'fade-in': 'fadeIn 0.5s ease-in-out',
+                'bounce': 'bounce 1s infinite',
+            },
+          }
+        }
+      }
+    </script>
+  <script type="importmap">
+{
+  "imports": {
+    "react-dom/": "https://esm.sh/react-dom@^19.1.0/",
+    "react/": "https://esm.sh/react@^19.1.0/",
+    "react": "https://esm.sh/react@^19.1.0",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.6.3"
+  }
+}
+</script>
+</head>
+  <body class="bg-gray-200">
+    <div id="root"></div>
+    <script type="module" src="/dist/index.js"></script>
+  </body>
+</html>

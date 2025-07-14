@@ -1,0 +1,665 @@
+{
+  "users": [
+    {
+      "id": "user-1",
+      "username": "Alex",
+      "password": "Alex&77",
+      "fullName": "Alex Morgan",
+      "email": "alex.morgan@example.com",
+      "phone": "555-123-4567",
+      "ssn": "000-00-0001",
+      "dob": "1990-07-02",
+      "customerSince": 2016,
+      "accounts": [
+        {
+          "id": "checking-1",
+          "type": "Everyday Checking",
+          "name": "Everyday Checking",
+          "numberSuffix": "0987",
+          "balance": 532780.23,
+          "subText": "Available balance"
+        },
+        {
+          "id": "savings-1",
+          "type": "WAY2SAVE",
+          "name": "WAY2SAVE",
+          "numberSuffix": "1122",
+          "balance": 2181589.98,
+          "subText": "Available balance"
+        },
+        {
+          "id": "credit-card-1",
+          "type": "Wells Fargo Active Cash Card",
+          "name": "Wells Fargo Active Cash Card",
+          "numberSuffix": "7654",
+          "balance": 8430.15,
+          "subText": "Outstanding balance"
+        }
+      ],
+      "notifications": [
+        {
+          "id": "n1",
+          "message": "A large deposit of $125,000.00 was credited to your checking account.",
+          "date": "Jul 1, 2024",
+          "isRead": false
+        },
+        {
+          "id": "n2",
+          "message": "Your payment to GUCCI for $9,430.50 has been processed.",
+          "date": "Jun 28, 2024",
+          "isRead": false
+        },
+        {
+          "id": "n3",
+          "message": "A new statement is available for your WAY2SAVE account.",
+          "date": "Jun 26, 2024",
+          "isRead": true
+        },
+        {
+          "id": "n4",
+          "message": "Your FICO® Score has been updated. It increased by 10 points!",
+          "date": "Apr 19, 2024",
+          "isRead": true
+        }
+      ],
+      "rewards": {
+        "balance": 18230,
+        "activity": [
+          {
+            "date": "07/08/24",
+            "description": "2% Cash Rewards: AMAZON.COM",
+            "amount": 4.91
+          },
+          {
+            "date": "07/07/24",
+            "description": "2% Cash Rewards: WHOLE FOODS",
+            "amount": 3.6
+          },
+          {
+            "date": "07/02/24",
+            "description": "2% Cash Rewards: DELTA AIR LINES",
+            "amount": 25.01
+          },
+          {
+            "date": "06/20/24",
+            "description": "Redemption - Statement Credit",
+            "amount": -50
+          },
+          {
+            "date": "06/15/24",
+            "description": "2% Cash Rewards: RESTAURANT DANIEL",
+            "amount": 19
+          }
+        ]
+      }
+    }
+  ],
+  "admins": [
+    {
+      "id": "admin-1",
+      "username": "Admin",
+      "password": "Wellsfargo&77"
+    }
+  ],
+  "transactions": {
+    "checking-1": [
+      {
+        "id": "txn-c-1",
+        "date": "07/08/24",
+        "description": "ROLEX BOUTIQUE",
+        "amount": -31550,
+        "type": "debit",
+        "category": "luxury",
+        "merchant": "ROLEX BOUTIQUE",
+        "status": "Completed",
+        "postedDate": "07/08/2024",
+        "runningBalance": 53780.23
+      },
+      {
+        "id": "txn-c-2",
+        "date": "07/07/24",
+        "description": "FOUR SEASONS HOTEL",
+        "amount": -7800,
+        "type": "debit",
+        "category": "travel",
+        "merchant": "FOUR SEASONS HOTEL",
+        "status": "Completed",
+        "postedDate": "07/07/2024",
+        "runningBalance": 75330.23
+      },
+      {
+        "id": "txn-c-3",
+        "date": "07/05/24",
+        "description": "ONLINE TRANSFER TO SAV...1122",
+        "amount": -1500000,
+        "type": "debit",
+        "category": "transfer",
+        "merchant": "Online Transfer",
+        "status": "Completed",
+        "postedDate": "07/05/2024",
+        "runningBalance": 83130.23
+      },
+      {
+        "id": "txn-c-4",
+        "date": "07/01/24",
+        "description": "INCOMING WIRE TRANSFER - DIVIDEND",
+        "amount": 125000,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "STONEGATE CAPITAL",
+        "status": "Completed",
+        "postedDate": "07/01/2024",
+        "runningBalance": 233130.23
+      },
+      {
+        "id": "txn-c-5",
+        "date": "06/28/24",
+        "description": "GUCCI",
+        "amount": -9430.5,
+        "type": "debit",
+        "category": "luxury",
+        "merchant": "GUCCI",
+        "status": "Completed",
+        "postedDate": "06/28/2024",
+        "runningBalance": 108130.23
+      },
+      {
+        "id": "txn-c-6",
+        "date": "06/25/24",
+        "description": "ATM WITHDRAWAL",
+        "amount": -500,
+        "type": "debit",
+        "category": "services",
+        "merchant": "Wells Fargo ATM",
+        "status": "Completed",
+        "postedDate": "06/25/2024",
+        "runningBalance": 117560.73
+      },
+      {
+        "id": "txn-c-7",
+        "date": "06/22/24",
+        "description": "STARBUCKS",
+        "amount": -12.45,
+        "type": "debit",
+        "category": "food",
+        "merchant": "STARBUCKS",
+        "status": "Completed",
+        "postedDate": "06/22/2024",
+        "runningBalance": 118060.73
+      },
+      {
+        "id": "txn-c-8",
+        "date": "06/20/24",
+        "description": "ZELLE FROM JANE DOE",
+        "amount": 2500,
+        "type": "credit",
+        "category": "transfer",
+        "merchant": "Zelle",
+        "status": "Completed",
+        "postedDate": "06/20/2024",
+        "runningBalance": 118073.18
+      },
+      {
+        "id": "txn-c-9",
+        "date": "05/15/24",
+        "description": "PAYROLL DEPOSIT",
+        "amount": 15000,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "YOUR COMPANY INC",
+        "status": "Completed",
+        "postedDate": "05/15/2024",
+        "runningBalance": 115573.18
+      },
+      {
+        "id": "txn-c-10",
+        "date": "04/10/24",
+        "description": "APPLE.COM",
+        "amount": -1299,
+        "type": "debit",
+        "category": "shopping",
+        "merchant": "APPLE.COM",
+        "status": "Completed",
+        "postedDate": "04/10/2024",
+        "runningBalance": 100573.18
+      },
+      {
+        "id": "txn-c-11",
+        "date": "2023-12-20",
+        "description": "HOLIDAY BONUS",
+        "amount": 5000,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "YOUR COMPANY INC",
+        "status": "Completed",
+        "postedDate": "2023-12-20",
+        "runningBalance": 101872.18
+      },
+      {
+        "id": "txn-c-12",
+        "date": "2023-11-05",
+        "description": "UTILITY BILL",
+        "amount": -250,
+        "type": "debit",
+        "category": "services",
+        "merchant": "PG&E",
+        "status": "Completed",
+        "postedDate": "2023-11-05",
+        "runningBalance": 96872.18
+      },
+      {
+        "id": "txn-c-13",
+        "date": "2022-08-19",
+        "description": "VENMO PAYMENT",
+        "amount": -80,
+        "type": "debit",
+        "category": "transfer",
+        "merchant": "VENMO",
+        "status": "Completed",
+        "postedDate": "2022-08-19",
+        "runningBalance": 97122.18
+      },
+      {
+        "id": "txn-c-14",
+        "date": "2021-03-12",
+        "description": "STOCK DIVIDEND",
+        "amount": 1200,
+        "type": "credit",
+        "category": "investment",
+        "merchant": "E-TRADE",
+        "status": "Completed",
+        "postedDate": "2021-03-12",
+        "runningBalance": 97202.18
+      },
+      {
+        "id": "txn-c-15",
+        "date": "2020-07-30",
+        "description": "CAR INSURANCE",
+        "amount": -180,
+        "type": "debit",
+        "category": "services",
+        "merchant": "GEICO",
+        "status": "Completed",
+        "postedDate": "2020-07-30",
+        "runningBalance": 96002.18
+      },
+      {
+        "id": "txn-c-16",
+        "date": "2019-01-22",
+        "description": "GYM MEMBERSHIP",
+        "amount": -50,
+        "type": "debit",
+        "category": "services",
+        "merchant": "24 HOUR FITNESS",
+        "status": "Completed",
+        "postedDate": "2019-01-22",
+        "runningBalance": 96182.18
+      },
+      {
+        "id": "txn-c-17",
+        "date": "2018-05-16",
+        "description": "CONCERT TICKETS",
+        "amount": -350,
+        "type": "debit",
+        "category": "shopping",
+        "merchant": "TICKETMASTER",
+        "status": "Completed",
+        "postedDate": "2018-05-16",
+        "runningBalance": 96232.18
+      },
+      {
+        "id": "txn-c-18",
+        "date": "2017-11-01",
+        "description": "RENT PAYMENT",
+        "amount": -2500,
+        "type": "debit",
+        "category": "transfer",
+        "merchant": "APARTMENT MGMT",
+        "status": "Completed",
+        "postedDate": "2017-11-01",
+        "runningBalance": 96582.18
+      },
+      {
+        "id": "txn-c-19",
+        "date": "2016-02-14",
+        "description": "VALENTINE'S DINNER",
+        "amount": -220,
+        "type": "debit",
+        "category": "food",
+        "merchant": "FRENCH LAUNDRY",
+        "status": "Completed",
+        "postedDate": "2016-02-14",
+        "runningBalance": 99082.18
+      },
+      {
+        "id": "txn-c-20",
+        "date": "2016-01-05",
+        "description": "INITIAL DEPOSIT",
+        "amount": 100000,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "BRANCH DEPOSIT",
+        "status": "Completed",
+        "postedDate": "2016-01-05",
+        "runningBalance": 99302.18
+      }
+    ],
+    "savings-1": [
+      {
+        "id": "txn-s-1",
+        "date": "07/05/24",
+        "description": "ONLINE TRANSFER FROM CHK...0987",
+        "amount": 1500000,
+        "type": "credit",
+        "category": "transfer",
+        "merchant": "Online Transfer",
+        "status": "Completed",
+        "postedDate": "07/05/2024",
+        "runningBalance": 2181589.98
+      },
+      {
+        "id": "txn-s-2",
+        "date": "06/15/24",
+        "description": "INTEREST PAYMENT",
+        "amount": 7353.98,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "06/15/2024",
+        "runningBalance": 2031589.98
+      },
+      {
+        "id": "txn-s-3",
+        "date": "05/15/24",
+        "description": "INTEREST PAYMENT",
+        "amount": 7120.5,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "05/15/2024",
+        "runningBalance": 2024236
+      },
+      {
+        "id": "txn-s-4",
+        "date": "04/15/24",
+        "description": "INTEREST PAYMENT",
+        "amount": 6980.1,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "04/15/2024",
+        "runningBalance": 2017115.5
+      },
+      {
+        "id": "txn-s-5",
+        "date": "03/15/24",
+        "description": "INTEREST PAYMENT",
+        "amount": 6850.25,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "03/15/2024",
+        "runningBalance": 2010135.4
+      },
+      {
+        "id": "txn-s-6",
+        "date": "02/15/24",
+        "description": "INTEREST PAYMENT",
+        "amount": 6700,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "02/15/2024",
+        "runningBalance": 2003285.15
+      },
+      {
+        "id": "txn-s-7",
+        "date": "01/15/24",
+        "description": "INTEREST PAYMENT",
+        "amount": 6500,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "01/15/2024",
+        "runningBalance": 1996585.15
+      },
+      {
+        "id": "txn-s-8",
+        "date": "2023-12-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 6300,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-12-15",
+        "runningBalance": 1990085.15
+      },
+      {
+        "id": "txn-s-9",
+        "date": "2023-11-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 6100,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-11-15",
+        "runningBalance": 1983785.15
+      },
+      {
+        "id": "txn-s-10",
+        "date": "2023-10-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 5900,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-10-15",
+        "runningBalance": 1977685.15
+      },
+      {
+        "id": "txn-s-11",
+        "date": "2023-09-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 5700,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-09-15",
+        "runningBalance": 1971785.15
+      },
+      {
+        "id": "txn-s-12",
+        "date": "2023-08-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 5500,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-08-15",
+        "runningBalance": 1966085.15
+      },
+      {
+        "id": "txn-s-13",
+        "date": "2023-07-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 5300,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-07-15",
+        "runningBalance": 1960585.15
+      },
+      {
+        "id": "txn-s-14",
+        "date": "2023-06-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 5100,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-06-15",
+        "runningBalance": 1955285.15
+      },
+      {
+        "id": "txn-s-15",
+        "date": "2023-05-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 4900,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-05-15",
+        "runningBalance": 1950185.15
+      },
+      {
+        "id": "txn-s-16",
+        "date": "2023-04-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 4700,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-04-15",
+        "runningBalance": 1945285.15
+      },
+      {
+        "id": "txn-s-17",
+        "date": "2023-03-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 4500,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-03-15",
+        "runningBalance": 1940585.15
+      },
+      {
+        "id": "txn-s-18",
+        "date": "2023-02-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 4300,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-02-15",
+        "runningBalance": 1936085.15
+      },
+      {
+        "id": "txn-s-19",
+        "date": "2023-01-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 4100,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2023-01-15",
+        "runningBalance": 1931785.15
+      },
+      {
+        "id": "txn-s-20",
+        "date": "2022-12-15",
+        "description": "INTEREST PAYMENT",
+        "amount": 3900,
+        "type": "credit",
+        "category": "deposit",
+        "merchant": "WELLS FARGO BANK",
+        "status": "Completed",
+        "postedDate": "2022-12-15",
+        "runningBalance": 1927685.15
+      },
+      {
+        "id": "txn-s-1",
+        "date": "2022-11-14",
+        "description": "ONLINE TRANSFER FROM CHK...0987",
+        "amount": 620000,
+        "type": "credit",
+        "category": "transfer",
+        "merchant": "Online Transfer",
+        "status": "Completed",
+        "postedDate": "07/05/2024",
+        "runningBalance": 620000.30
+      }
+    ],
+    "credit-card-1": [
+      {
+        "id": "txn-cc-1",
+        "date": "07/08/24",
+        "description": "AMAZON.COM",
+        "amount": -245.5,
+        "type": "debit",
+        "category": "shopping",
+        "merchant": "AMAZON.COM",
+        "status": "Completed",
+        "postedDate": "07/08/2024",
+        "runningBalance": -8430.15
+      },
+      {
+        "id": "txn-cc-2",
+        "date": "07/07/24",
+        "description": "WHOLE FOODS MARKET",
+        "amount": -180.22,
+        "type": "debit",
+        "category": "food",
+        "merchant": "WHOLE FOODS MARKET",
+        "status": "Completed",
+        "postedDate": "07/07/2024",
+        "runningBalance": -8184.65
+      },
+      {
+        "id": "txn-cc-3",
+        "date": "07/02/24",
+        "description": "DELTA AIR LINES",
+        "amount": -1250.55,
+        "type": "debit",
+        "category": "travel",
+        "merchant": "DELTA AIR LINES",
+        "status": "Completed",
+        "postedDate": "07/02/2024",
+        "runningBalance": -8004.43
+      },
+      {
+        "id": "txn-cc-4",
+        "date": "06/20/24",
+        "description": "AUTOMATIC PAYMENT - THANK YOU",
+        "amount": 11000,
+        "type": "credit",
+        "category": "transfer",
+        "merchant": "Online Payment",
+        "status": "Completed",
+        "postedDate": "06/20/2024",
+        "runningBalance": -6753.88
+      },
+      {
+        "id": "txn-cc-5",
+        "date": "06/15/24",
+        "description": "RESTAURANT DANIEL",
+        "amount": -950,
+        "type": "debit",
+        "category": "food",
+        "merchant": "RESTAURANT DANIEL",
+        "status": "Completed",
+        "postedDate": "06/15/2024",
+        "runningBalance": -11753.88
+      }
+    ]
+  },
+  "verifications": []
+}
