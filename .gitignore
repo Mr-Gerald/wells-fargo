@@ -22,3 +22,14 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Dependencies
+/node_modules/
+/backend/node_modules/
+
+# Build artifacts
+/dist/
+
+# Environment variables
+.env
+backend/.env
