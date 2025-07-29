@@ -17,12 +17,16 @@ const NotificationItem: React.FC<{ notification: Notification; onView: (notif: N
         onDelete(notification.id);
     }
     
+    // By stripping HTML tags, we prevent long URLs in `href` attributes from breaking the layout.
+    const plainTextMessage = notification.message.replace(/<[^>]*>?/gm, '');
+
     return (
         <div onClick={() => onView(notification)} className="p-3 border-b border-gray-200 last:border-b-0 hover:bg-gray-100 flex items-start cursor-pointer">
             {!notification.isRead && <div className="w-2 h-2 bg-blue-500 rounded-full mt-1.5 mr-3 flex-shrink-0"></div>}
-            <div className={`flex-grow ${notification.isRead ? 'pl-5' : ''}`}>
+            {/* The `min-w-0` class is crucial in flexbox layouts to allow text to wrap and truncate properly. */}
+            <div className={`flex-grow min-w-0 ${notification.isRead ? 'pl-5' : ''}`}>
                 <p className="text-sm text-gray-800 pr-4 line-clamp-2">
-                    {notification.message}
+                    {plainTextMessage}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">{formatTimeAgo(notification.date)}</p>
             </div>

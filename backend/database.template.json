@@ -33,7 +33,7 @@
           "name": "Wells Fargo Active Cash Card",
           "numberSuffix": "7654",
           "balance": 8430.15,
-          "subText": "Outstanding balance"
+          "subText": "Available balance"
         }
       ],
       "notifications": [

@@ -35,7 +35,8 @@ const DashboardPage: React.FC = () => {
     return <div>Loading...</div>;
   }
   
-  const isDemoUser = user.id === 'user-1';
+  // Show extra cards if the user has rewards activity, making it work for Alex and his clones.
+  const showExtraCards = user.rewards && user.rewards.activity && user.rewards.activity.length > 0;
 
   return (
     <div className="bg-gradient-to-b from-wells-gradient-start to-wells-gradient-end min-h-full">
@@ -58,7 +59,7 @@ const DashboardPage: React.FC = () => {
           </Link>
         </div>
         
-        {isDemoUser && (
+        {showExtraCards && (
           <div className="mt-8 space-y-6">
               <Link to="/fico-score">
                   <FicoScoreCard />

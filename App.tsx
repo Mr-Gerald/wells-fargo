@@ -1,5 +1,6 @@
 
 
+
 import React, { useEffect, useState } from 'react';
 import { Routes, Route, useLocation, Navigate } from 'react-router-dom';
 import { useAuth } from './contexts/AuthContext';
@@ -42,6 +43,8 @@ import AdminPage from './components/admin/AdminPage';
 import ProfilePage from './components/ProfilePage';
 import VerificationPage from './components/VerificationPage';
 import BonusPointsPage from './components/BonusPointsPage';
+import CreateInstantAccountPage from './components/CreateInstantAccountPage';
+import { User } from './types';
 
 const FloatingChatButton = () => {
     const { openChat } = useChat();
@@ -110,6 +113,8 @@ function App() {
 
   const hideBottomNav = location.pathname.startsWith('/verify-identity');
   const showChatButton = !hideBottomNav;
+  const user = currentUser as User;
+  const hasRewards = user.rewards && user.rewards.activity && user.rewards.activity.length > 0;
 
   return (
     <div className="max-w-md mx-auto bg-white min-h-screen shadow-lg flex flex-col">
@@ -120,9 +125,9 @@ function App() {
                   <Route path="/" element={<DashboardPage />} />
                   <Route path="/account/:id" element={<AccountDetailsPage />} />
                   <Route path="/account/:id/transaction/:txId" element={<TransactionReceiptPage />} />
-                  <Route path="/fico-score" element={currentUser.id === 'user-1' ? <FicoScorePage /> : <Navigate to="/" />} />
-                  <Route path="/rewards" element={currentUser.id === 'user-1' ? <RewardsPage /> : <Navigate to="/" />} />
-                  <Route path="/bonus-points" element={currentUser.id === 'user-1' ? <BonusPointsPage /> : <Navigate to="/" />} />
+                  <Route path="/fico-score" element={hasRewards ? <FicoScorePage /> : <Navigate to="/" />} />
+                  <Route path="/rewards" element={hasRewards ? <RewardsPage /> : <Navigate to="/" />} />
+                  <Route path="/bonus-points" element={hasRewards ? <BonusPointsPage /> : <Navigate to="/" />} />
                   <Route path="/deposit" element={<DepositPage />} />
                   <Route path="/pay-transfer" element={<PayTransferPage />} />
                   <Route path="/explore" element={<ExplorePage />} />
@@ -147,6 +152,7 @@ function App() {
                   <Route path="/menu/contact-us" element={<ContactUsPage />} />
                   <Route path="/menu/open-account" element={<OpenAccountPage />} />
                   <Route path="/menu/profile" element={<ProfilePage />} />
+                  <Route path="/menu/create-instant-account" element={<CreateInstantAccountPage />} />
 
 
                   {/* Explore Sub-pages */}

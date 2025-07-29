@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import PageHeader from './PageHeader';
 import { useAuth } from '../contexts/AuthContext';
@@ -6,7 +7,7 @@ import { User } from '../types';
 import ConfirmationModal from './ConfirmationModal';
 
 const ProfilePage: React.FC = () => {
-    const { currentUser, updateUser, deleteAccount } = useAuth();
+    const { currentUser, updateUser, deleteAccount, resetUserData } = useAuth();
     const user = currentUser as User;
     
     const [username, setUsername] = useState('');
@@ -22,6 +23,7 @@ const ProfilePage: React.FC = () => {
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [showResetConfirm, setShowResetConfirm] = useState(false);
 
 
     useEffect(() => {
@@ -89,11 +91,28 @@ const ProfilePage: React.FC = () => {
             setError(err.message || 'Failed to delete account');
             setLoading(false);
         }
-    }
+    };
+    
+    const handleReset = async () => {
+        setShowResetConfirm(false);
+        setError('');
+        setFeedback('');
+        setLoading(true);
+        try {
+            await resetUserData();
+            // The logout/redirect is handled by the context
+        } catch(err: any) {
+             setError(err.message || 'Failed to reset account.');
+        } finally {
+             setLoading(false);
+        }
+    };
 
     if (!user) {
         return null; // Should not happen if routed correctly
     }
+
+    const isDemoOrClone = user.rewards && user.rewards.activity && user.rewards.activity.length > 0;
 
     return (
         <div className="bg-slate-50 min-h-full">
@@ -147,19 +166,41 @@ const ProfilePage: React.FC = () => {
                         {loading ? 'Saving...' : 'Save Changes'}
                     </button>
 
-                    <div className="mt-6 pt-6 border-t border-red-200">
-                        <h3 className="text-lg font-semibold text-red-700">Delete Account</h3>
-                        <p className="text-sm text-gray-600 my-2">This action is permanent and cannot be undone. All your data, including accounts and transaction history, will be permanently removed.</p>
-                        <button
-                            type="button"
-                            onClick={() => setShowDeleteConfirm(true)}
-                            disabled={loading}
-                            className="w-full bg-red-600 text-white font-bold py-3 rounded-md hover:bg-red-800 transition duration-300 disabled:opacity-50"
-                        >
-                            Delete My Account
-                        </button>
-                    </div>
-                   
+                    {user.id !== 'user-1' && (
+                        <div className="mt-6 pt-6 border-t border-red-200">
+                            <h3 className="text-lg font-semibold text-red-700">Delete Account</h3>
+                            <p className="text-sm text-gray-600 my-2">This action is permanent and cannot be undone. All your data, including accounts and transaction history, will be permanently removed.</p>
+                            <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(true)}
+                                disabled={loading}
+                                className="w-full bg-red-600 text-white font-bold py-3 rounded-md hover:bg-red-800 transition duration-300 disabled:opacity-50"
+                            >
+                                Delete My Account
+                            </button>
+                        </div>
+                    )}
+                    
+                    {isDemoOrClone && (
+                         <div className="mt-6 pt-6 border-t border-yellow-400">
+                            <h3 className="text-lg font-semibold text-yellow-700">
+                                {user.id === 'user-1' ? 'Reset Demo Account' : 'Reset Account to Default'}
+                            </h3>
+                            <p className="text-sm text-gray-600 my-2">
+                                {user.id === 'user-1' 
+                                    ? "This will reset all data for the Alex account in this browser back to its original state. You will be signed out."
+                                    : "This will reset all your account data (balances, transactions) back to the original default state. This action is permanent and cannot be undone."}
+                            </p>
+                            <button
+                                type="button"
+                                onClick={() => setShowResetConfirm(true)}
+                                disabled={loading}
+                                className="w-full bg-yellow-500 text-black font-bold py-3 rounded-md hover:bg-yellow-600 transition duration-300 disabled:opacity-50"
+                            >
+                                {user.id === 'user-1' ? 'Reset All Data' : 'Reset Account'}
+                            </button>
+                        </div>
+                    )}
                 </form>
             </div>
             <ConfirmationModal
@@ -168,6 +209,13 @@ const ProfilePage: React.FC = () => {
                 onConfirm={handleDelete}
                 title="Confirm Account Deletion"
                 message="Are you absolutely sure you want to delete your account? This is irreversible."
+            />
+             <ConfirmationModal
+                isOpen={showResetConfirm}
+                onClose={() => setShowResetConfirm(false)}
+                onConfirm={handleReset}
+                title={user.id === 'user-1' ? "Confirm Demo Account Reset" : "Confirm Account Reset"}
+                message={user.id === 'user-1' ? "Are you sure you want to reset this demo account? All local changes will be lost, and you will be signed out." : "Are you sure you want to reset your account data? This will restore balances and transactions to their original state and is irreversible."}
             />
         </div>
     );
