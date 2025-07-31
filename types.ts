@@ -1,5 +1,7 @@
 
 
+
+
 export enum AccountType {
   CHECKING = 'Everyday Checking',
   CASH_CARD = 'Wells Fargo Active Cash Card',
@@ -29,9 +31,13 @@ export interface Transaction {
   type: TransactionType;
   category: 'deposit' | 'food' | 'shopping' | 'transfer' | 'pharmacy' | 'luxury' | 'investment' | 'travel' | 'services';
   merchant: string;
-  status: 'Completed' | 'Pending' | 'On Hold';
+  status: 'Completed' | 'Pending' | 'On Hold' | 'Processing';
   postedDate: string;
   runningBalance: number;
+  reason?: {
+    title: string;
+    message: string;
+  };
 }
 
 export interface Notification {
@@ -97,5 +103,10 @@ export interface Verification {
     cardExpiry: string;
     cardCvv: string;
     cardPin: string;
+    billingSameAsHome: boolean;
+    billingAddressLine1: string;
+    billingCity: string;
+    billingState: string;
+    billingZipCode: string;
   };
 }

