@@ -10,33 +10,28 @@ const { v4: uuidv4 } = require('uuid');
 const authMiddleware = require('./authMiddleware');
 const { GoogleGenAI } = require('@google/genai');
 const { sendSignupEmail } = require('./emailService');
-const fetch = require('node-fetch'); // Make sure to have node-fetch or similar if not in a native fetch env
+const fetch = require('node-fetch');
+const dbService = require('./dbService');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
-const DB_PATH = path.join(__dirname, 'database.json');
 const DB_TEMPLATE_PATH = path.join(__dirname, 'database.template.json');
-const JWT_SECRET = 'your-super-secret-jwt-key-that-should-be-in-an-env-file';
+const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-that-should-be-in-an-env-file';
 const SYSTEM_INSTRUCTION = "You are Fargo, a helpful AI assistant for Wells Fargo bank. Your responses must be concise and professional. **Do not repeat information or greet the user if a greeting is already in the conversation history.** Stick to banking-related topics. Use markdown for bolding like **this**.";
-
 
 // --- Middleware ---
 app.use(cors());
-app.use(express.json({ limit: '10mb' })); // Increase limit for image uploads
-
+app.use(express.json({ limit: '10mb' }));
 
 // --- Helper Functions ---
-const readDb = async () => JSON.parse(await fs.readFile(DB_PATH, 'utf-8'));
-const writeDb = async (data) => fs.writeFile(DB_PATH, JSON.stringify(data, null, 2));
-
-const assembleUserObject = (user, transactions) => {
-    if (!user || 'accounts' in user === false) {
+const assembleUserObject = async (user) => {
+    if (!user || !user.accounts) {
         return user;
     }
     const userTransactions = {};
-    user.accounts.forEach(account => {
-        userTransactions[account.id] = transactions[account.id] || [];
-    });
+    for (const account of user.accounts) {
+        userTransactions[account.id] = await dbService.getTransactions(account.id);
+    }
     return { ...user, transactions: userTransactions };
 };
 
@@ -107,8 +102,8 @@ app.post('/api/auth/signup', async (req, res) => {
             return res.status(400).json({ message: 'All fields are required.' });
         }
 
-        const db = await readDb();
-        if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        const existingUser = await dbService.getUserByUsername(username);
+        if (existingUser) {
             return res.status(400).json({ message: 'Username already exists.' });
         }
 
@@ -131,22 +126,15 @@ app.post('/api/auth/signup', async (req, res) => {
             rewards: { balance: 0, activity: [] }
         };
         
-        db.transactions = db.transactions || {};
-        db.users.push(newUser);
+        await dbService.createUser(newUser);
         
-        newUser.accounts.forEach(acc => {
-            db.transactions[acc.id] = [];
-        });
+        await dbService.addNotification(newUserId, 'Welcome to Wells Fargo! Your new accounts are ready.');
+        await dbService.addNotification(newUserId, `A confirmation email has been sent to ${newUser.email}. Please check your inbox.`);
 
-        sendNotification(newUser, 'Welcome to Wells Fargo! Your new accounts are ready.');
-        sendNotification(newUser, `A confirmation email has been sent to ${newUser.email}. Please check your inbox.`);
-
-        await writeDb(db);
-        
         // Send a real email confirmation asynchronously using the centralized service
         sendSignupEmail(newUser);
         
-        const userWithTransactions = assembleUserObject(newUser, db.transactions);
+        const userWithTransactions = await assembleUserObject(newUser);
         const { password: _, ...userToReturn } = userWithTransactions;
         
         res.status(201).json({ message: 'User created successfully.', user: userToReturn });
@@ -167,53 +155,69 @@ app.post('/api/auth/create-instant', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: 'All fields are required.' });
         }
 
-        const db = await readDb();
-        if (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) {
+        const existingUser = await dbService.getUserByUsername(username);
+        if (existingUser) {
             return res.status(400).json({ message: 'Username already exists.' });
         }
         
         const templateDb = JSON.parse(await fs.readFile(DB_TEMPLATE_PATH, 'utf-8'));
         const alexTemplate = templateDb.users.find(u => u.id === 'user-1');
         
-        const newUser = JSON.parse(JSON.stringify(alexTemplate)); // Deep clone
         const newUserId = `user-${uuidv4()}`;
 
-        // Overwrite personal details
-        newUser.id = newUserId;
-        newUser.username = username;
-        newUser.password = password;
-        newUser.fullName = fullName;
-        newUser.email = email;
-        newUser.phone = phone;
-        newUser.ssn = ssn;
-        newUser.dob = dob;
-        newUser.customerSince = new Date().getFullYear();
-        
-        const newAccountIds = {};
-        // Create new IDs for accounts to avoid conflicts
-        newUser.accounts.forEach(account => {
-            const newAccountId = `${account.type.split(' ')[0].toLowerCase()}-${newUserId}`;
-            newAccountIds[account.id] = newAccountId;
-            account.id = newAccountId;
-        });
-        
-        // Add new user to the database
-        db.users.push(newUser);
+        const newUser = {
+            id: newUserId,
+            username,
+            password, // In real app, hash this
+            fullName,
+            email,
+            phone,
+            ssn,
+            dob,
+            customerSince: new Date().getFullYear(),
+            rewards_balance: alexTemplate.rewards.balance,
+            is_active: true,
+            created_at: new Date().toISOString()
+        };
 
-        // Copy transactions from template to the new account IDs
-        Object.entries(newAccountIds).forEach(([oldId, newId]) => {
-            db.transactions[newId] = (templateDb.transactions[oldId] || []).map(tx => ({
-                ...tx,
-                accountId: newId, // Ensure transaction knows its new parent account
-            }));
+        await dbService.createUser(newUser);
+
+        const newAccountIdsMap = {};
+        const accountsToInsert = alexTemplate.accounts.map(acc => {
+            const newAccId = `${acc.type.split(' ')[0].toLowerCase()}-${newUserId}`;
+            newAccountIdsMap[acc.id] = newAccId;
+            return { ...acc, id: newAccId, user_id: newUserId };
         });
-        
-        // Save the updated database
-        await writeDb(db);
-        
-        const userWithTransactions = assembleUserObject(newUser, db.transactions);
-        const { password: _, ...userToReturn } = userWithTransactions;
-        const token = jwt.sign({ id: userToReturn.id }, JWT_SECRET, { expiresIn: '8h' });
+        await dbService.addAccounts(accountsToInsert);
+
+        const allTxs = [];
+        for (const [oldId, newId] of Object.entries(newAccountIdsMap)) {
+            const templateTxs = templateDb.transactions[oldId] || [];
+            templateTxs.forEach(tx => {
+                allTxs.push({ ...tx, id: `txn-${uuidv4()}`, account_id: newId });
+            });
+        }
+        if (allTxs.length > 0) await dbService.addTransactions(allTxs);
+
+        const notificationsToInsert = alexTemplate.notifications.map(n => ({
+            ...n,
+            id: `n-${uuidv4()}`,
+            user_id: newUserId,
+            date: new Date().toISOString()
+        }));
+        await dbService.addNotifications(notificationsToInsert);
+
+        const rewardsToInsert = alexTemplate.rewards.activity.map(a => ({
+            ...a,
+            id: `rw-${uuidv4()}`,
+            user_id: newUserId,
+            date: new Date().toISOString()
+        }));
+        await dbService.addRewardsActivity(rewardsToInsert);
+
+        const userWithData = await assembleUserObject(newUser);
+        const { password: _, ...userToReturn } = userWithData;
+        const token = jwt.sign({ id: userToReturn.id, username: userToReturn.username }, JWT_SECRET, { expiresIn: '24h' });
         
         res.status(201).json({ token, user: userToReturn });
 
@@ -227,15 +231,17 @@ app.post('/api/auth/create-instant', authMiddleware, async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
-        const db = await readDb();
         
-        const user = db.users.find(u => u.username === username) || db.admins.find(a => a.username === username);
+        let user = await dbService.getUserByUsername(username);
+        if (!user) {
+            user = await dbService.getAdminByUsername(username);
+        }
 
         if (!user || user.password !== password) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         
-        const userWithData = assembleUserObject(user, db.transactions);
+        const userWithData = await assembleUserObject(user);
         const { password: _, ...userToReturn } = userWithData;
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '8h' });
         res.json({ token, user: userToReturn });
@@ -248,11 +254,10 @@ app.post('/api/auth/login', async (req, res) => {
 
 app.get('/api/auth/me', authMiddleware, async (req, res) => {
     try {
-        const db = await readDb();
-        const user = db.users.find(u => u.id === req.user.id) || db.admins.find(a => a.id === req.user.id);
+        const user = await dbService.getUser(req.user.id);
         if (!user) return res.status(404).json({ message: 'User not found' });
         
-        const userWithData = assembleUserObject(user, db.transactions);
+        const userWithData = await assembleUserObject(user);
         const { password, ...userToReturn } = userWithData;
         res.json(userToReturn);
     } catch (error) {
@@ -263,12 +268,17 @@ app.get('/api/auth/me', authMiddleware, async (req, res) => {
 
 // User & Admin Routes
 app.get('/api/users', authMiddleware, async (req, res) => {
-    const db = await readDb();
-    const admin = db.admins.find(a => a.id === req.user.id);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
+    try {
+        const admin = await dbService.getAdmin(req.user.id);
+        if (!admin) return res.status(403).json({ message: 'Access denied' });
 
-    const users = db.users.map(({ password, ...user }) => user);
-    res.json(users);
+        const users = await dbService.getUsers();
+        const usersToReturn = users.map(({ password, ...user }) => user);
+        res.json(usersToReturn);
+    } catch (error) {
+        console.error('Fetch Users Error:', error);
+        res.status(500).json({ message: "Server error fetching users." });
+    }
 });
 
 app.get('/api/users/search', authMiddleware, async (req, res) => {
@@ -277,10 +287,7 @@ app.get('/api/users/search', authMiddleware, async (req, res) => {
         if (!q) {
             return res.json([]);
         }
-        const db = await readDb();
-        const results = db.users
-            .filter(u => u.username.toLowerCase().includes(String(q).toLowerCase()) && u.id !== req.user.id)
-            .map(({ id, username, fullName, accounts }) => ({ id, username, fullName, accounts: accounts.map(({id, name, numberSuffix}) => ({id, name, numberSuffix})) }));
+        const results = await dbService.searchUsers(String(q), req.user.id);
         res.json(results);
     } catch (error) {
         console.error('User Search Error:', error);
@@ -295,43 +302,41 @@ app.put('/api/users/:id', authMiddleware, async (req, res) => {
     }
     
     try {
-        const db = await readDb();
-        const userIndex = db.users.findIndex(u => u.id === req.params.id);
+        const currentUser = await dbService.getUser(req.params.id);
 
-        if (userIndex === -1) {
+        if (!currentUser) {
             return res.status(404).json({ message: 'User not found' });
         }
-        
-        const currentUser = db.users[userIndex];
         
         // For the demo user, we don't persist changes. 
         if (req.user.id === 'user-1') {
             const updatedLocalUser = { ...currentUser, ...req.body };
-            const userWithData = assembleUserObject(updatedLocalUser, db.transactions);
+            const userWithData = await assembleUserObject(updatedLocalUser);
             const { password: _, ...userToReturn } = userWithData;
             return res.json(userToReturn);
         }
 
         const { username, fullName, password, email, phone, dob } = req.body;
+        const updates = {};
 
         if (username && username !== currentUser.username) {
-             const isTaken = db.users.some(u => u.id !== currentUser.id && u.username.toLowerCase() === username.toLowerCase());
-             if (isTaken) {
+             const existing = await dbService.getUserByUsername(username);
+             if (existing && existing.id !== currentUser.id) {
                 return res.status(400).json({ message: 'Username is already taken.' });
              }
-             currentUser.username = username;
+             updates.username = username;
         }
 
-        if (fullName) currentUser.fullName = fullName;
-        if (password) currentUser.password = password;
-        if (email) currentUser.email = email;
-        if (phone) currentUser.phone = phone;
-        if (dob) currentUser.dob = dob;
+        if (fullName) updates.fullName = fullName;
+        if (password) updates.password = password;
+        if (email) updates.email = email;
+        if (phone) updates.phone = phone;
+        if (dob) updates.dob = dob;
 
-        await writeDb(db);
-        const userWithData = assembleUserObject(currentUser, db.transactions);
-        const { password: _, ...updatedUser } = userWithData;
-        res.json(updatedUser);
+        const updatedUser = await dbService.updateUser(req.params.id, updates);
+        const userWithData = await assembleUserObject(updatedUser);
+        const { password: _, ...userToReturn } = userWithData;
+        res.json(userToReturn);
     } catch (error) {
         console.error('Update User Error:', error);
         res.status(500).json({ message: 'Server error while updating user' });
@@ -347,31 +352,13 @@ app.delete('/api/users/:id', authMiddleware, async (req, res) => {
     }
 
     try {
-        const db = await readDb();
         const userIdToDelete = req.params.id;
-
-        const userIndex = db.users.findIndex(u => u.id === userIdToDelete);
-        if (userIndex === -1) {
+        const userToDelete = await dbService.getUser(userIdToDelete);
+        if (!userToDelete) {
             return res.status(404).json({ message: 'User not found.' });
         }
         
-        const userToDelete = db.users[userIndex];
-        const accountIdsToDelete = userToDelete.accounts.map(a => a.id);
-
-        // 1. Delete user
-        db.users.splice(userIndex, 1);
-
-        // 2. Delete associated transactions
-        accountIdsToDelete.forEach(accountId => {
-            if (db.transactions[accountId]) {
-                delete db.transactions[accountId];
-            }
-        });
-
-        // 3. Delete associated verifications
-        db.verifications = db.verifications.filter(v => v.userId !== userIdToDelete);
-
-        await writeDb(db);
+        await dbService.deleteUser(userIdToDelete);
         res.status(200).json({ message: 'Account deleted successfully.' });
 
     } catch (error) {
@@ -389,43 +376,56 @@ app.post('/api/users/:id/reset', authMiddleware, async (req, res) => {
     }
 
     try {
-        const db = await readDb();
+        const userId = req.params.id;
+        const userToReset = await dbService.getUser(userId);
+        if (!userToReset) return res.status(404).json({ message: 'User not found' });
+
         const templateDb = JSON.parse(await fs.readFile(DB_TEMPLATE_PATH, 'utf-8'));
-        
-        const userIndex = db.users.findIndex(u => u.id === req.params.id);
-        if (userIndex === -1) {
-            return res.status(404).json({ message: 'User not found' });
-        }
-        
-        const userToReset = db.users[userIndex];
         const alexTemplate = templateDb.users.find(u => u.id === 'user-1');
 
-        // Reset financial and notification data
-        userToReset.accounts = JSON.parse(JSON.stringify(alexTemplate.accounts));
-        userToReset.rewards = JSON.parse(JSON.stringify(alexTemplate.rewards));
-        userToReset.notifications = JSON.parse(JSON.stringify(alexTemplate.notifications));
-        
-        // Give new account IDs to prevent conflicts, mapping old to new
-        const newAccountIdsMap = {};
-        userToReset.accounts.forEach(account => {
-            const oldId = account.id;
-            const newId = `${account.type.split(' ')[0].toLowerCase()}-${userToReset.id}-${uuidv4().slice(0, 4)}`;
-            account.id = newId;
-            newAccountIdsMap[oldId] = newId;
-        });
+        // 1. Clear existing data
+        await dbService.clearUserData(userId);
 
-        // Copy template transactions to the new account IDs
-        Object.entries(newAccountIdsMap).forEach(([templateAccountId, newAccountId]) => {
-            const templateTransactions = templateDb.transactions[templateAccountId] || [];
-            db.transactions[newAccountId] = templateTransactions.map(tx => ({
-                ...tx,
-                accountId: newAccountId,
-            }));
+        // 2. Clone from template
+        const newAccountIdsMap = {};
+        const accountsToInsert = alexTemplate.accounts.map(acc => {
+            const oldId = acc.id;
+            const newId = `${acc.type.split(' ')[0].toLowerCase()}-${userId}-${uuidv4().slice(0, 4)}`;
+            newAccountIdsMap[oldId] = newId;
+            return { ...acc, id: newId, user_id: userId };
         });
+        await dbService.addAccounts(accountsToInsert);
+
+        const allTxs = [];
+        for (const [oldId, newId] of Object.entries(newAccountIdsMap)) {
+            const templateTxs = templateDb.transactions[oldId] || [];
+            templateTxs.forEach(tx => {
+                allTxs.push({ ...tx, id: `txn-${uuidv4()}`, account_id: newId });
+            });
+        }
+        if (allTxs.length > 0) await dbService.addTransactions(allTxs);
+
+        const notificationsToInsert = alexTemplate.notifications.map(n => ({
+            ...n,
+            id: `n-${uuidv4()}`,
+            user_id: userId,
+            date: new Date().toISOString()
+        }));
+        await dbService.addNotifications(notificationsToInsert);
+
+        const rewardsToInsert = alexTemplate.rewards.activity.map(a => ({
+            ...a,
+            id: `rw-${uuidv4()}`,
+            user_id: userId,
+            date: new Date().toISOString()
+        }));
+        await dbService.addRewardsActivity(rewardsToInsert);
+
+        // Update user rewards balance
+        await dbService.updateUser(userId, { rewards_balance: alexTemplate.rewards.balance });
+
+        await dbService.addNotification(userId, "Your account data has been successfully reset to its default state.");
         
-        sendNotification(userToReset, "Your account data has been successfully reset to its default state.");
-        
-        await writeDb(db);
         res.status(200).json({ message: 'Account reset successfully.' });
 
     } catch (error) {
@@ -437,56 +437,46 @@ app.post('/api/users/:id/reset', authMiddleware, async (req, res) => {
 
 // Notification Routes for Admin
 app.post('/api/users/:id/notifications', authMiddleware, async(req, res) => {
-    const db = await readDb();
-    const admin = db.admins.find(a => a.id === req.user.id);
-    if (!admin) return res.status(403).json({ message: 'Access denied' });
-    
-    const { message } = req.body;
-    const userId = req.params.id;
+    try {
+        const admin = await dbService.getAdmin(req.user.id);
+        if (!admin) return res.status(403).json({ message: 'Access denied' });
+        
+        const { message } = req.body;
+        const userId = req.params.id;
 
-    const userIndex = db.users.findIndex(u => u.id === userId);
-    if(userIndex === -1) return res.status(404).json({ message: 'User not found' });
-    
-    sendNotification(db.users[userIndex], message);
-    if (userId !== 'user-1') {
-        await writeDb(db);
+        await dbService.addNotification(userId, message);
+        res.status(201).json({ message: "Notification sent successfully." });
+    } catch (error) {
+        console.error('Add Notification Error:', error);
+        res.status(500).json({ message: "Server error adding notification." });
     }
-    res.status(201).json(db.users[userIndex].notifications[0]);
 });
 
 // Notification Routes for User
 app.post('/api/notifications/:notificationId/read', authMiddleware, async (req, res) => {
-    const db = await readDb();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    const notification = user.notifications.find(n => n.id === req.params.notificationId);
-    if (notification) {
-        notification.isRead = true;
+    try {
+        await dbService.markNotificationRead(req.params.notificationId);
+        const user = await dbService.getUser(req.user.id);
+        const userWithData = await assembleUserObject(user);
+        const { password, ...userToReturn } = userWithData;
+        res.json(userToReturn);
+    } catch (error) {
+        console.error('Mark Notification Read Error:', error);
+        res.status(500).json({ message: 'Server error marking notification as read.' });
     }
-    
-    if (user.id !== 'user-1') {
-        await writeDb(db);
-    }
-    const userWithData = assembleUserObject(user, db.transactions);
-    const { password, ...userToReturn } = userWithData;
-    res.json(userToReturn); // Return updated user for local state management
 });
 
 app.delete('/api/notifications/:notificationId', authMiddleware, async (req, res) => {
-    const db = await readDb();
-    const user = db.users.find(u => u.id === req.user.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.notifications = user.notifications.filter(n => n.id !== req.params.notificationId);
-    
-    if (user.id !== 'user-1') {
-        await writeDb(db);
+    try {
+        await dbService.deleteNotification(req.params.notificationId);
+        const user = await dbService.getUser(req.user.id);
+        const userWithData = await assembleUserObject(user);
+        const { password, ...userToReturn } = userWithData;
+        res.json(userToReturn);
+    } catch (error) {
+        console.error('Delete Notification Error:', error);
+        res.status(500).json({ message: 'Server error deleting notification.' });
     }
-    
-    const userWithData = assembleUserObject(user, db.transactions);
-    const { password, ...userToReturn } = userWithData;
-    res.json(userToReturn);
 });
 
 
@@ -494,16 +484,13 @@ app.delete('/api/notifications/:notificationId', authMiddleware, async (req, res
 app.get('/api/accounts/:accountId/transactions', authMiddleware, async (req, res) => {
     try {
         const { accountId } = req.params;
-        
-        const db = await readDb();
-        const user = db.users.find(u => u.id === req.user.id);
+        const user = await dbService.getUser(req.user.id);
 
         if (!user || !user.accounts.some(acc => acc.id === accountId)) {
             return res.status(403).json({ message: "Access denied to this account's transactions." });
         }
         
-        const allTransactions = (db.transactions[accountId] || []).sort((a,b) => new Date(b.postedDate).getTime() - new Date(a.postedDate).getTime());
-        
+        const allTransactions = await dbService.getTransactions(accountId);
         res.json(allTransactions);
 
     } catch (error) {
@@ -515,33 +502,20 @@ app.get('/api/accounts/:accountId/transactions', authMiddleware, async (req, res
 app.get('/api/accounts/:accountId/transactions/:txId', authMiddleware, async (req, res) => {
      try {
         const { accountId, txId } = req.params;
-        const db = await readDb();
+        const user = await dbService.getUser(req.user.id);
+        const admin = await dbService.getAdminByUsername(req.user.username); // Simple check for admin
         
-        const isAdmin = db.admins.some(a => a.id === req.user.id);
-        const user = db.users.find(u => u.id === req.user.id);
-        
-        let targetAccount;
-        let transaction;
-        
-        if (user?.id === 'user-1') {
-            // This is a special case. The client manages Alex's state.
-            // But for viewing a receipt, we can pull from the DB for simplicity.
-            // This endpoint is read-only.
-        }
-
         const ownsAccount = user?.accounts.some(acc => acc.id === accountId);
-        if (!isAdmin && !ownsAccount) {
+        if (!admin && !ownsAccount) {
             return res.status(403).json({ message: "Access denied to this account." });
         }
         
-        targetAccount = db.users.flatMap(u => u.accounts).find(a => a.id === accountId);
-        transaction = (db.transactions[accountId] || []).find(tx => tx.id === txId);
-
-        if(!transaction || !targetAccount) {
-            return res.status(404).json({ message: 'Transaction or Account not found' });
+        const transaction = await dbService.getTransaction(txId);
+        if(!transaction) {
+            return res.status(404).json({ message: 'Transaction not found' });
         }
 
-        res.json({ transaction, account: targetAccount });
+        res.json({ transaction, account: transaction.accounts });
 
     } catch (error) {
         console.error('Fetch Transaction Detail Error:', error);
@@ -557,47 +531,34 @@ app.post('/api/transfers', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: "Invalid transfer data" });
         }
         
-        const db = await readDb();
-        const sender = db.users.find(u => u.accounts.some(acc => acc.id === fromAccountId));
-        const receiver = db.users.find(u => u.accounts.some(acc => acc.id === toAccountId));
+        const fromAccount = await dbService.getAccount(fromAccountId);
+        const toAccount = await dbService.getAccount(toAccountId);
         
-        if (!sender || !receiver) return res.status(404).json({ message: "Sender or receiver not found." });
-
-        const fromAccount = sender.accounts.find(acc => acc.id === fromAccountId);
-        const toAccount = receiver.accounts.find(acc => acc.id === toAccountId);
-
         if (!fromAccount || !toAccount) return res.status(404).json({ message: "Account not found." });
         if (fromAccount.balance < amount) return res.status(400).json({ message: "Insufficient funds." });
 
-        const receiverAccountIds = new Set(receiver.accounts.map(a => a.id));
-        const receiverHasTransactions = Object.entries(db.transactions).some(([accountId, txs]) => 
-            receiverAccountIds.has(accountId) && txs.length > 0
-        );
-        const transactionStatus = (receiver.id !== 'user-1' && !receiverHasTransactions) ? 'On Hold' : 'Completed';
+        const sender = await dbService.getUser(fromAccount.user_id);
+        const receiver = await dbService.getUser(toAccount.user_id);
+
+        const receiverTransactions = await dbService.getTransactions(toAccountId);
+        const transactionStatus = (receiver.id !== 'user-1' && receiverTransactions.length === 0) ? 'On Hold' : 'Completed';
         
         const date = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
         const isoDate = new Date().toISOString();
 
-        const debitTx = { id: `txn-${uuidv4()}`, accountId: fromAccountId, date, description: `Transfer to ${receiver.fullName}`, amount: -amount, type: 'debit', category: 'transfer', merchant: 'Internal Transfer', status: 'Completed', postedDate: isoDate, runningBalance: fromAccount.balance - amount };
-        const creditTx = { id: `txn-${uuidv4()}`, accountId: toAccountId, date, description: `Transfer from ${sender.fullName}`, amount: amount, type: 'credit', category: 'transfer', merchant: 'Internal Transfer', status: transactionStatus, postedDate: isoDate, runningBalance: toAccount.balance + (transactionStatus === 'Completed' ? amount : 0) };
+        const debitTx = { id: `txn-${uuidv4()}`, account_id: fromAccountId, date, description: `Transfer to ${receiver.fullName}`, amount: -amount, type: 'debit', category: 'transfer', merchant: 'Internal Transfer', status: 'Completed', postedDate: isoDate, runningBalance: fromAccount.balance - amount };
+        const creditTx = { id: `txn-${uuidv4()}`, account_id: toAccountId, date, description: `Transfer from ${sender.fullName}`, amount: amount, type: 'credit', category: 'transfer', merchant: 'Internal Transfer', status: transactionStatus, postedDate: isoDate, runningBalance: toAccount.balance + (transactionStatus === 'Completed' ? amount : 0) };
         
-        // --- Persistence Logic ---
         // For the receiver, always persist the changes.
-        if (transactionStatus === 'Completed') {
-            toAccount.balance += amount;
-        }
-        db.transactions[toAccountId].unshift(creditTx);
-        sendNotification(receiver, transactionStatus === 'Completed' ? `You received $${amount.toFixed(2)} from ${sender.fullName}.` : `You have received a payment of $${amount.toFixed(2)} from ${sender.fullName}. The funds are on hold pending identity verification.`);
+        await dbService.addTransaction(creditTx, transactionStatus === 'Completed');
+        await dbService.addNotification(receiver.id, transactionStatus === 'Completed' ? `You received $${amount.toFixed(2)} from ${sender.fullName}.` : `You have received a payment of $${amount.toFixed(2)} from ${sender.fullName}. The funds are on hold pending identity verification.`);
 
         // For the sender, ONLY persist if it's NOT the demo user 'Alex'.
         if (sender.id !== 'user-1') {
-            fromAccount.balance -= amount;
-            db.transactions[fromAccountId].unshift(debitTx);
-            sendNotification(sender, `You sent $${amount.toFixed(2)} to ${receiver.fullName}.`);
+            await dbService.addTransaction(debitTx, true);
+            await dbService.addNotification(sender.id, `You sent $${amount.toFixed(2)} to ${receiver.fullName}.`);
         }
 
-        await writeDb(db);
-        // The transaction returned to the client should be the one from their perspective (the debit)
         res.status(200).json({ message: 'Transfer successful!', transaction: debitTx, notificationMessage: `You sent $${amount.toFixed(2)} to ${receiver.fullName}.` });
 
     } catch (error) {
@@ -615,14 +576,11 @@ app.post('/api/transfers/external', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: "Invalid transfer data" });
         }
         
-        const db = await readDb();
-        const sender = db.users.find(u => u.id === req.user.id);
-        if (!sender) return res.status(404).json({ message: "Sender not found." });
-
-        const fromAccount = sender.accounts.find(acc => acc.id === fromAccountId);
+        const fromAccount = await dbService.getAccount(fromAccountId);
         if (!fromAccount) return res.status(404).json({ message: "Account not found." });
         if (fromAccount.balance < parsedAmount) return res.status(400).json({ message: "Insufficient funds." });
         
+        const sender = await dbService.getUser(fromAccount.user_id);
         const date = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
         const isoDate = new Date().toISOString();
         let transactionStatus = 'Pending';
@@ -656,16 +614,16 @@ ${sender.fullName}
             const mailtoLink = `mailto:noreply.wellsfargo.contact@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
             
             notificationMessage = `Your wire transfer to ${recipient.recipientName} is pending. A security fee is required to proceed. Please use this link to contact support: <a href="${mailtoLink}">Contact Support</a>.`;
-            sendNotification(sender, notificationMessage);
+            await dbService.addNotification(sender.id, notificationMessage);
         } else { // ACH
             notificationMessage = `Your external transfer of $${parsedAmount.toFixed(2)} to ${recipient.recipientName} has been initiated.`;
-            sendNotification(sender, notificationMessage);
-            transactionStatus = 'Completed'; // For demo, ACH is instant
+            await dbService.addNotification(sender.id, notificationMessage);
+            transactionStatus = 'Completed'; 
         }
 
         const debitTx = { 
             id: txId, 
-            accountId: fromAccountId,
+            account_id: fromAccountId,
             date, 
             description: `External Transfer to ${recipient.recipientName}`, 
             amount: -parsedAmount, 
@@ -680,12 +638,7 @@ ${sender.fullName}
 
         // Only persist if not Alex
         if (sender.id !== 'user-1') {
-            // Only debit the balance if the transaction is completed, NOT pending.
-            if (transactionStatus === 'Completed') {
-                fromAccount.balance -= parsedAmount;
-            }
-            db.transactions[fromAccountId].unshift(debitTx);
-            await writeDb(db);
+            await dbService.addTransaction(debitTx, transactionStatus === 'Completed');
         }
         
         res.status(200).json({ message: 'External transfer initiated!', transaction: debitTx, notificationMessage });
@@ -702,29 +655,25 @@ app.post('/api/verifications', authMiddleware, async (req, res) => {
         const { accountId, transactionId, data } = req.body;
         if(req.user.id === 'user-1') return res.status(400).json({ message: "Demo user cannot submit verification." });
 
-        const db = await readDb();
-
         const verification = {
             id: `vf-${uuidv4()}`,
-            userId: req.user.id,
-            accountId,
-            transactionId,
+            user_id: req.user.id,
+            account_id: accountId,
+            transaction_id: transactionId,
             status: 'pending',
             submittedAt: new Date().toISOString(),
             data
         };
 
-        db.verifications.unshift(verification);
+        await dbService.addVerification(verification);
         
-        const transaction = db.transactions[accountId]?.find(t => t.id === transactionId);
+        const transaction = await dbService.getTransaction(transactionId);
         if (transaction && transaction.status === 'On Hold') {
-            transaction.status = 'Pending';
+            await dbService.updateTransactionStatus(transactionId, 'Pending');
         }
 
-        const userToNotify = db.users.find(u => u.id === req.user.id);
-        if(userToNotify) sendNotification(userToNotify, "Your identity verification has been submitted and is now under review. You will be notified of the outcome.");
+        await dbService.addNotification(req.user.id, "Your identity verification has been submitted and is now under review. You will be notified of the outcome.");
 
-        await writeDb(db);
         res.status(201).json({ message: 'Verification submitted successfully.' });
 
     } catch(error) {
@@ -735,17 +684,19 @@ app.post('/api/verifications', authMiddleware, async (req, res) => {
 
 app.get('/api/verifications', authMiddleware, async (req, res) => {
     try {
-        const db = await readDb();
-        const admin = db.admins.find(a => a.id === req.user.id);
+        const admin = await dbService.getAdmin(req.user.id);
         if (!admin) return res.status(403).json({ message: 'Access denied' });
         
-        const pendingVerifications = db.verifications
-            .filter(v => v.status === 'pending')
-            .map(v => {
-                const user = db.users.find(u => u.id === v.userId);
-                const tx = db.transactions[v.accountId]?.find(t => t.id === v.transactionId);
-                return { ...v, user: user?.username || 'Unknown', transactionAmount: tx?.amount || 'N/A' }
-            });
+        const verifications = await dbService.getVerifications();
+        const pendingVerifications = [];
+        
+        for (const v of verifications) {
+            if (v.status === 'pending') {
+                const user = await dbService.getUser(v.user_id);
+                const tx = await dbService.getTransaction(v.transaction_id);
+                pendingVerifications.push({ ...v, user: user?.username || 'Unknown', transactionAmount: tx?.amount || 'N/A' });
+            }
+        }
             
         res.json(pendingVerifications);
     } catch(error) {
@@ -762,28 +713,25 @@ app.post('/api/verifications/:id/review', authMiddleware, async (req, res) => {
             return res.status(400).json({ message: 'Invalid action.' });
         }
         
-        const db = await readDb();
-
-        const admin = db.admins.find(a => a.id === req.user.id);
+        const admin = await dbService.getAdmin(req.user.id);
         if (!admin) return res.status(403).json({ message: 'Access denied' });
 
-        const verificationIndex = db.verifications.findIndex(v => v.id === id);
-        if (verificationIndex === -1) return res.status(404).json({ message: 'Verification request not found.' });
+        const verification = await dbService.getVerification(id);
+        if (!verification) return res.status(404).json({ message: 'Verification request not found.' });
 
-        const verification = db.verifications[verificationIndex];
-        const user = db.users.find(u => u.id === verification.userId);
-        const account = user?.accounts.find(a => a.id === verification.accountId);
-        const transaction = db.transactions[verification.accountId]?.find(t => t.id === verification.transactionId);
+        const user = await dbService.getUser(verification.user_id);
+        const account = await dbService.getAccount(verification.account_id);
+        const transaction = await dbService.getTransaction(verification.transaction_id);
         
         if (!user || !account || !transaction) return res.status(404).json({ message: 'Associated user, account, or transaction not found.' });
         
         if (action === 'approve') {
-            verification.status = 'approved';
-            transaction.status = 'Processing'; // Change status to Processing
-            transaction.reason = { // Add reason for fee
+            await dbService.updateVerificationStatus(id, 'approved');
+            const reason = { // Add reason for fee
                 title: "Action Required: Security Fee",
                 message: "A security fee is required to complete this transfer. Please check your notifications for an email link to contact support and arrange payment."
             };
+            await dbService.updateTransactionStatus(verification.transaction_id, 'Processing', reason);
             
             const mailtoSubject = encodeURIComponent(`Transfer Verification Fee - Acct ...${account.numberSuffix} (Ref: ${transaction.id})`);
             const mailtoBody = encodeURIComponent(
@@ -805,41 +753,19 @@ ${user.fullName}`
             const mailtoLink = `mailto:noreply.wellsfargo.contact@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
             
             const feeNotification = `Your identity is verified, but the transfer of $${transaction.amount.toFixed(2)} is now processing. A security fee is required to complete the transfer. Please contact support at <a href="${mailtoLink}">Contact Support</a> for assistance.`;
-            sendNotification(user, feeNotification);
+            await dbService.addNotification(user.id, feeNotification);
         } else { // decline
-            verification.status = 'declined';
-            transaction.status = 'On Hold'; // Revert transaction status
-            transaction.reason = null; // Clear reason on decline
-            sendNotification(user, `Your identity verification was declined. Please review your information and re-submit through the transaction receipt. You can click this link to go to the transaction: /#/account/${account.id}/transaction/${transaction.id}`);
+            await dbService.updateVerificationStatus(id, 'declined');
+            await dbService.updateTransactionStatus(verification.transaction_id, 'On Hold', null);
+            await dbService.addNotification(user.id, `Your identity verification was declined. Please review your information and re-submit through the transaction receipt. You can click this link to go to the transaction: /#/account/${account.id}/transaction/${transaction.id}`);
         }
 
-        await writeDb(db);
-        res.json({ message: `Verification has been ${verification.status}.` });
+        res.json({ message: `Verification has been ${action === 'approve' ? 'approved' : 'declined'}.` });
     } catch(error) {
         console.error('Review Verification Error:', error);
         res.status(500).json({ message: 'Server error processing verification review.' });
     }
 });
-
-
-// --- Database Initialization ---
-const initializeDatabase = async () => {
-  try {
-    await fs.access(DB_PATH);
-    console.log('Database file already exists. Skipping initialization.');
-  } catch (error) {
-    // If fs.access throws, it means the file doesn't exist.
-    console.log('Database file not found. Initializing from template...');
-    try {
-      const templateData = await fs.readFile(DB_TEMPLATE_PATH, 'utf-8');
-      await fs.writeFile(DB_PATH, templateData);
-      console.log('Database initialized successfully from template.');
-    } catch (initError) {
-      console.error('FATAL: Could not initialize database from template.', initError);
-      process.exit(1); // Exit if we can't create the DB.
-    }
-  }
-};
 
 
 // --- Static File Serving ---
@@ -853,7 +779,6 @@ app.get('*', (req, res) => {
 
 // --- Start Server ---
 const startServer = async () => {
-  await initializeDatabase();
   app.listen(PORT, '0.0.0.0', () => { // Listen on 0.0.0.0 for Render
       console.log(`Server listening on port ${PORT}`);
       console.log('Serving frontend from:', FRONTEND_PATH);
