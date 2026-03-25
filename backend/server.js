@@ -770,18 +770,25 @@ ${user.fullName}`
 
 // --- Static File Serving ---
 const FRONTEND_PATH = path.join(__dirname, '..');
-app.use(express.static(FRONTEND_PATH));
-app.use('/dist', express.static(path.join(FRONTEND_PATH, 'dist')));
+const DIST_PATH = path.join(FRONTEND_PATH, 'dist');
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(FRONTEND_PATH, 'index.html'));
-});
+if (process.env.NODE_ENV === 'development') {
+  app.use(express.static(FRONTEND_PATH));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(FRONTEND_PATH, 'index.html'));
+  });
+} else {
+  app.use(express.static(DIST_PATH));
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(DIST_PATH, 'index.html'));
+  });
+}
 
 // --- Start Server ---
 const startServer = async () => {
   app.listen(PORT, '0.0.0.0', () => { // Listen on 0.0.0.0 for Render
       console.log(`Server listening on port ${PORT}`);
-      console.log('Serving frontend from:', FRONTEND_PATH);
+      console.log('Serving frontend from:', process.env.NODE_ENV === 'development' ? FRONTEND_PATH : DIST_PATH);
 
       // Self-ping to keep Render instance alive
       const PING_URL = 'https://wells-fargo-pgz8.onrender.com/';
