@@ -291,6 +291,31 @@ const dbService = {
     },
 
     /**
+     * Get all verifications
+     */
+    async getVerifications() {
+        const { data, error } = await supabase
+            .from('verifications')
+            .select('*')
+            .order('submittedAt', { ascending: false });
+        
+        if (error) throw error;
+        return data || [];
+    },
+
+    /**
+     * Add a verification
+     */
+    async addVerification(verification) {
+        const { error } = await supabase
+            .from('verifications')
+            .insert([verification]);
+        
+        if (error) throw error;
+        return verification;
+    },
+
+    /**
      * Get pending verifications
      */
     async getPendingVerifications() {
