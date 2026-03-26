@@ -30,7 +30,8 @@ const assembleUserObject = async (user) => {
     }
     const userTransactions = {};
     for (const account of user.accounts) {
-        userTransactions[account.id] = await dbService.getTransactions(account.id);
+        const txs = await dbService.getTransactions(account.id);
+        userTransactions[account.id] = txs.map(tx => ({ ...tx, accountId: tx.account_id }));
     }
     return { ...user, transactions: userTransactions };
 };
@@ -491,7 +492,8 @@ app.get('/api/accounts/:accountId/transactions', authMiddleware, async (req, res
         }
         
         const allTransactions = await dbService.getTransactions(accountId);
-        res.json(allTransactions);
+        const mappedTransactions = allTransactions.map(tx => ({ ...tx, accountId: tx.account_id }));
+        res.json(mappedTransactions);
 
     } catch (error) {
         console.error('Fetch Transactions Error:', error);
@@ -515,7 +517,8 @@ app.get('/api/accounts/:accountId/transactions/:txId', authMiddleware, async (re
             return res.status(404).json({ message: 'Transaction not found' });
         }
 
-        res.json({ transaction, account: transaction.accounts });
+        const mappedTx = { ...transaction, accountId: transaction.account_id };
+        res.json({ transaction: mappedTx, account: transaction.accounts });
 
     } catch (error) {
         console.error('Fetch Transaction Detail Error:', error);
@@ -546,8 +549,8 @@ app.post('/api/transfers', authMiddleware, async (req, res) => {
         const date = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
         const isoDate = new Date().toISOString();
 
-        const debitTx = { id: `txn-${uuidv4()}`, account_id: fromAccountId, date, description: `Transfer to ${receiver.fullName}`, amount: -amount, type: 'debit', category: 'transfer', merchant: 'Internal Transfer', status: 'Completed', postedDate: isoDate, runningBalance: fromAccount.balance - amount };
-        const creditTx = { id: `txn-${uuidv4()}`, account_id: toAccountId, date, description: `Transfer from ${sender.fullName}`, amount: amount, type: 'credit', category: 'transfer', merchant: 'Internal Transfer', status: transactionStatus, postedDate: isoDate, runningBalance: toAccount.balance + (transactionStatus === 'Completed' ? amount : 0) };
+        const debitTx = { id: `txn-${uuidv4()}`, account_id: fromAccountId, accountId: fromAccountId, date, description: `Transfer to ${receiver.fullName}`, amount: -amount, type: 'debit', category: 'transfer', merchant: 'Internal Transfer', status: 'Completed', postedDate: isoDate, runningBalance: fromAccount.balance - amount };
+        const creditTx = { id: `txn-${uuidv4()}`, account_id: toAccountId, accountId: toAccountId, date, description: `Transfer from ${sender.fullName}`, amount: amount, type: 'credit', category: 'transfer', merchant: 'Internal Transfer', status: transactionStatus, postedDate: isoDate, runningBalance: toAccount.balance + (transactionStatus === 'Completed' ? amount : 0) };
         
         // For the receiver, always persist the changes.
         await dbService.addTransaction(creditTx, transactionStatus === 'Completed');
@@ -624,6 +627,7 @@ ${sender.fullName}
         const debitTx = { 
             id: txId, 
             account_id: fromAccountId,
+            accountId: fromAccountId,
             date, 
             description: `External Transfer to ${recipient.recipientName}`, 
             amount: -parsedAmount, 

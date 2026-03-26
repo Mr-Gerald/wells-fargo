@@ -5,6 +5,7 @@
     "scripts": {
       "dev": "nodemon backend/server.js",
       "build": "node ./backend/build.js",
+      "lint": "tsc --noEmit",
       "start": "npm run build && node backend/server.js",
       "preview": "vite preview"
     },
