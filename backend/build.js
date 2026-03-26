@@ -35,7 +35,7 @@ try {
 }
 
 // 3. Run esbuild
-const esbuildCmd = `npx esbuild "${indexTsxPath}" --bundle --outfile="${distIndexJsPath}" --jsx=automatic --format=esm --platform=browser --external:react --external:react-dom/client --external:react-router-dom --external:react/jsx-runtime`;
+const esbuildCmd = `npx esbuild "${indexTsxPath}" --bundle --outfile="${distIndexJsPath}" --jsx=automatic --format=esm --platform=browser`;
 
 try {
   console.log('📦 Bundling with esbuild...');
