@@ -53,14 +53,14 @@ const dbService = {
      * Get user by username
      */
     async getUserByUsername(username) {
-        const { data: user, error } = await supabase
+        const { data, error } = await supabase
             .from('users')
             .select('id')
             .ilike('username', username)
-            .single();
+            .limit(1);
         
-        if (error || !user) return null;
-        return this.getUser(user.id);
+        if (error || !data || data.length === 0) return null;
+        return this.getUser(data[0].id);
     },
 
     /**
@@ -81,13 +81,14 @@ const dbService = {
      * Get admin by username
      */
     async getAdminByUsername(username) {
-        const { data: admin, error } = await supabase
+        const { data, error } = await supabase
             .from('admins')
             .select('*')
             .ilike('username', username)
-            .single();
+            .limit(1);
         
-        return admin;
+        if (error || !data || data.length === 0) return null;
+        return data[0];
     },
 
     /**
@@ -499,7 +500,9 @@ const dbService = {
         for (const n of notifications) {
             await supabase.from('notifications').insert({ ...n, user_id: userId });
         }
-    }
+    },
+    // Export supabase for external checks
+    supabase
 };
 
 module.exports = dbService;

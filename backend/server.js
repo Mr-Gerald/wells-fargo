@@ -25,15 +25,39 @@ app.use(express.json({ limit: '10mb' }));
 
 // --- Helper Functions ---
 const assembleUserObject = async (user) => {
-    if (!user || !user.accounts) {
+    try {
+        if (!user) return null;
+        
+        // If it's an admin, it won't have accounts
+        if (!user.accounts || !Array.isArray(user.accounts)) {
+            return user;
+        }
+
+        const userTransactions = {};
+        for (const account of user.accounts) {
+            if (!account || !account.id) continue;
+            
+            try {
+                const txs = await dbService.getTransactions(account.id);
+                if (txs && Array.isArray(txs)) {
+                    userTransactions[account.id] = txs.map(tx => ({ 
+                        ...tx, 
+                        accountId: tx.account_id || tx.accountId || account.id 
+                    }));
+                } else {
+                    userTransactions[account.id] = [];
+                }
+            } catch (txError) {
+                console.error(`Error fetching transactions for account ${account.id}:`, txError);
+                userTransactions[account.id] = [];
+            }
+        }
+        
+        return { ...user, transactions: userTransactions };
+    } catch (err) {
+        console.error('Fatal error in assembleUserObject:', err);
         return user;
     }
-    const userTransactions = {};
-    for (const account of user.accounts) {
-        const txs = await dbService.getTransactions(account.id);
-        userTransactions[account.id] = txs.map(tx => ({ ...tx, accountId: tx.account_id }));
-    }
-    return { ...user, transactions: userTransactions };
 };
 
 const sendNotification = (user, message) => {
@@ -232,19 +256,29 @@ app.post('/api/auth/create-instant', authMiddleware, async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     try {
         const { username, password } = req.body;
+        console.log('Login attempt for:', username);
         
         let user = await dbService.getUserByUsername(username);
         if (!user) {
+            console.log('User not found in users, checking admins...');
             user = await dbService.getAdminByUsername(username);
         }
 
-        if (!user || user.password !== password) {
+        if (!user) {
+            console.log('User not found in either table.');
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        if (user.password !== password) {
+            console.log('Password mismatch for:', username);
             return res.status(401).json({ message: 'Invalid credentials' });
         }
         
+        console.log('Login successful for:', username, 'assembling object...');
         const userWithData = await assembleUserObject(user);
         const { password: _, ...userToReturn } = userWithData;
         const token = jwt.sign({ id: user.id }, JWT_SECRET, { expiresIn: '8h' });
+        console.log('Sending response for:', username);
         res.json({ token, user: userToReturn });
 
     } catch (error) {
@@ -790,6 +824,17 @@ if (process.env.NODE_ENV === 'development') {
 
 // --- Start Server ---
 const startServer = async () => {
+  try {
+    const { data, error } = await dbService.supabase.from('users').select('id').limit(1);
+    if (error) {
+      console.error('❌ Supabase connection error:', error.message);
+    } else {
+      console.log('✅ Supabase connected successfully.');
+    }
+  } catch (err) {
+    console.error('❌ Supabase connection catch:', err.message);
+  }
+
   app.listen(PORT, '0.0.0.0', () => { // Listen on 0.0.0.0 for Render
       console.log(`Server listening on port ${PORT}`);
       console.log('Serving frontend from:', process.env.NODE_ENV === 'development' ? FRONTEND_PATH : DIST_PATH);
