@@ -15,6 +15,8 @@ const dbService = {
             .select('*')
             .eq('id', userId)
             .single();
+        
+        console.log('DEBUG: getUser returned:', user ? { id: user.id, username: user.username, hasPassword: !!user.password } : 'null');
 
         if (userError || !user) return null;
 

@@ -262,6 +262,8 @@ app.post('/api/auth/login', async (req, res) => {
         if (!user) {
             console.log('User not found in users, checking admins...');
             user = await dbService.getAdminByUsername(username);
+        } else {
+            console.log('DEBUG: Found user:', { id: user.id, username: user.username, hasPassword: !!user.password });
         }
 
         if (!user) {
