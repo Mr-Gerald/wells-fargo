@@ -202,7 +202,7 @@ const TransferMoneyPage: React.FC = () => {
             }
             
             setShowReviewModal(false);
-            navigate(`/account/${result.transaction.accountId}/transaction/${result.transaction.id}`, {
+            navigate(`/account/${result.transaction.account_id || result.transaction.accountId}/transaction/${result.transaction.id}`, {
                 state: { message: result.message }
             });
 

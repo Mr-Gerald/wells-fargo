@@ -212,9 +212,13 @@ const dbService = {
      * Add multiple transactions
      */
     async addTransactions(txs) {
+        const cleanedTxs = txs.map(tx => {
+            const { accountId, ...txData } = tx;
+            return txData;
+        });
         const { error } = await supabase
             .from('transactions')
-            .insert(txs);
+            .insert(cleanedTxs);
         
         if (error) throw error;
     },
