@@ -191,15 +191,16 @@ app.post('/api/auth/create-instant', authMiddleware, async (req, res) => {
         const newUserId = `user-${uuidv4()}`;
 
         const newUser = {
+            ...alexTemplate,
             id: newUserId,
             username,
-            password, // In real app, hash this
+            password,
             fullName,
             email,
             phone,
             ssn,
             dob,
-            customerSince: new Date().getFullYear(),
+            customerSince: alexTemplate.customerSince || new Date().getFullYear(),
             rewards_balance: alexTemplate.rewards.balance,
             is_active: true,
             created_at: new Date().toISOString()
@@ -665,7 +666,6 @@ ${sender.fullName}
         const debitTx = { 
             id: txId, 
             account_id: fromAccountId,
-            accountId: fromAccountId,
             date, 
             description: `External Transfer to ${recipient.recipientName}`, 
             amount: -parsedAmount, 

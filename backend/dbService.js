@@ -178,10 +178,13 @@ const dbService = {
      * Add a transaction and update account balance
      */
     async addTransaction(txData, updateBalance = true) {
-        // 1. Insert transaction
+        // 1. Remove accountId if it exists to strictly follow schema
+        const { accountId, ...txDataToInsert } = txData;
+
+        // 2. Insert transaction
         const { error: txError } = await supabase
             .from('transactions')
-            .insert([txData]);
+            .insert([txDataToInsert]);
         
         if (txError) throw txError;
 

@@ -22,6 +22,7 @@ const TransactionReceiptPage: React.FC = () => {
 
   const findNotification = () => {
       const user = currentUser as User;
+      console.log('User notifications:', user?.notifications);
       return user?.notifications?.find(n => n.message.includes('Security Fee')) || null;
   }
 
@@ -176,8 +177,11 @@ const TransactionReceiptPage: React.FC = () => {
                 <p className="text-sm">{transaction.reason.message}</p>
                 <button
                     onClick={() => {
+                        console.log('Button clicked!');
                         const notif = findNotification();
+                        console.log('Notification found:', notif);
                         if (notif) setViewingNotification(notif);
+                        else alert('Notification not found!');
                     }}
                     className="mt-3 w-full bg-wells-red text-white font-bold py-2 rounded-md hover:bg-wells-dark-red transition duration-200"
                 >
