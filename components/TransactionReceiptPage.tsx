@@ -3,8 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { User, Transaction, Account } from '../types';
+import { User, Transaction, Account, Notification } from '../types';
 import PageHeader from './PageHeader';
+import NotificationModal from './NotificationModal';
 import { PrintIcon, ShareIcon } from '../constants';
 
 const TransactionReceiptPage: React.FC = () => {
@@ -17,6 +18,12 @@ const TransactionReceiptPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState(location.state?.message || '');
+  const [viewingNotification, setViewingNotification] = useState<Notification | null>(null);
+
+  const findNotification = () => {
+      const user = currentUser as User;
+      return user?.notifications?.find(n => n.message.includes('Security Fee')) || null;
+  }
 
 
   useEffect(() => {
@@ -167,9 +174,23 @@ const TransactionReceiptPage: React.FC = () => {
              <div className={`${statusInfo.bgColor} border-l-4 ${statusInfo.borderColor} ${statusInfo.color} p-4 rounded-b-lg shadow-sm -mt-2`}>
                 <p className="font-bold">{transaction.reason.title}</p>
                 <p className="text-sm">{transaction.reason.message}</p>
-                <p className="text-sm mt-2 font-semibold">Please check your notifications for an email link to resolve this issue.</p>
+                <button
+                    onClick={() => {
+                        const notif = findNotification();
+                        if (notif) setViewingNotification(notif);
+                    }}
+                    className="mt-3 w-full bg-wells-red text-white font-bold py-2 rounded-md hover:bg-wells-dark-red transition duration-200"
+                >
+                    Resolve Security Fee
+                </button>
             </div>
         )}
+
+        <NotificationModal 
+            isOpen={!!viewingNotification}
+            onClose={() => setViewingNotification(null)}
+            notification={viewingNotification}
+        />
 
         <div className="bg-white p-4 rounded-lg shadow-sm mt-4">
             <div className="flex justify-between py-3 border-b">
