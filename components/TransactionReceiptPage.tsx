@@ -22,8 +22,7 @@ const TransactionReceiptPage: React.FC = () => {
 
   const findNotification = () => {
       const user = currentUser as User;
-      console.log('User notifications:', user?.notifications);
-      return user?.notifications?.find(n => n.message.includes('Security Fee')) || null;
+      return user?.notifications?.find(n => n.message.toLowerCase().includes('security fee')) || null;
   }
 
 
