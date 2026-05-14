@@ -687,7 +687,7 @@ ${sender.fullName}
 
     } catch (error) {
         console.error('External Transfer Error:', error);
-        res.status(500).json({ message: "Server error during external transfer." });
+        res.status(500).json({ message: "Server error during external transfer: " + error.message });
     }
 });
 
